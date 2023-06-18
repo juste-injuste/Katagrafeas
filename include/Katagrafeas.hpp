@@ -67,7 +67,7 @@ namespace Katagrafeas { namespace Backend
       inline Stream(std::ostream& ostream = std::cout, const char* preamble = "") noexcept;
       inline Stream(std::ofstream& ofstream, const char* preamble = "") noexcept;
       template<typename T>
-      inline Stream& operator<<(const T& text) const noexcept;
+      inline const Stream& operator<<(const T& text) const noexcept;
     private:
       std::ostream* stream;
       const char* preamble;
@@ -98,11 +98,9 @@ namespace Katagrafeas { namespace Backend
   {}
 
   template<typename T>
-  Stream& Stream::operator<<(const T& text) const noexcept
+  const Stream& Stream::operator<<(const T& text) const noexcept
   {
-    stream->operator<<(preamble);
-    
-    stream->operator<<(text);
+    *stream << preamble << text;
 
     return *this;
   }
@@ -132,11 +130,3 @@ namespace Katagrafeas { inline namespace Frontend
     }()
 }}
 #endif
-
-int main()
-{
-  using namespace Katagrafeas;
-
-  Logger test;
-  test.err << "test";
-}
