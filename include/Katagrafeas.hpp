@@ -67,17 +67,19 @@ namespace Katagrafeas { namespace Backend
       inline Stream(std::ostream& ostream = std::cout, const char* preamble = "") noexcept;
       inline Stream(std::ofstream& ofstream, const char* preamble = "") noexcept;
       template<typename T>
-      inline Stream& operator<<(const T text) noexcept;
+      inline Stream& operator<<(const T& text) const noexcept;
     private:
       std::ostream* stream;
       const char* preamble;
   };
 
   struct Logger final {
-    Stream out = {std::cout, ""};
-    Stream err = {std::cerr, "error: "};
-    Stream wrn = {std::cerr, "warning: "};
-    Stream log = {std::clog, "log: "};
+    inline Logger(void) noexcept;
+    inline Logger(Stream out, Stream err, Stream wrn, Stream log) noexcept;
+    const Stream out = {std::cout, ""};
+    const Stream err = {std::cerr, "error: "};
+    const Stream wrn = {std::cerr, "warning: "};
+    const Stream log = {std::clog, "log: "};
   };
 }}
 // --Katagrafeas library: backend struct and class member definitions--------------------
@@ -96,14 +98,25 @@ namespace Katagrafeas { namespace Backend
   {}
 
   template<typename T>
-  Stream& Stream::operator<<(const T text) noexcept
+  Stream& Stream::operator<<(const T& text) const noexcept
   {
     stream->operator<<(preamble);
     
     stream->operator<<(text);
 
     return *this;
-  } 
+  }
+
+  Logger::Logger(void) noexcept
+  {}
+
+  Logger::Logger(Stream out, Stream err, Stream wrn, Stream log) noexcept
+    : // member initialization list
+    out(out),
+    err(err),
+    wrn(wrn),
+    log(log)
+  {}
 }}
 // --Katagrafeas library: frontend definitions-------------------------------------------
 namespace Katagrafeas { inline namespace Frontend
@@ -113,9 +126,17 @@ namespace Katagrafeas { inline namespace Frontend
     []{                                     \
       using namespace Katagrafeas::Backend; \
       struct Logger {                       \
-        Stream __VA_ARGS__;                 \
+        const Stream __VA_ARGS__;           \
       } logger;                             \
       return logger;                        \
     }()
 }}
 #endif
+
+int main()
+{
+  using namespace Katagrafeas;
+
+  Logger test;
+  test.err << "test";
+}
