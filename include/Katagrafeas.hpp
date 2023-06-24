@@ -41,92 +41,133 @@
 #include <iosfwd>
 #include <iostream>
 #include <fstream>
-// --Katagrafeas library: backend forward declaration------------------------------------
-namespace Katagrafeas { namespace Backend
-{
-  // used to interface with output streams
-  class Stream;
-
-  // default logger
-  struct Logger;
-}}
+#include <vector>
+// --Katagrafeas library-----------------------------------------------------------------
+namespace Katagrafeas {
+  // library version
+  #define KATAGRAFEAS_VERSION       001000000L
+  #define KATAGRAFEAS_VERSION_MAJOR 1
+  #define KATAGRAFEAS_VERSION_MINOR 0
+  #define KATAGRAFEAS_VERSION_PATCH 0
 // --Katagrafeas library: frontend forward declarations----------------------------------
-namespace Katagrafeas { inline namespace Frontend
-{
-  // default logger
-  using Backend::Logger;
-
-  // create custom logger
-  #define KATAGRAFEAS_MAKELOGGER(...)
-}}
-// --Katagrafeas library: backend struct and class definitions---------------------------
-namespace Katagrafeas { namespace Backend
-{
-  class Stream final {
-    public:
-      inline Stream(std::ostream& ostream = std::cout, const char* preamble = "") noexcept;
-      inline Stream(std::ofstream& ofstream, const char* preamble = "") noexcept;
-      template<typename T>
-      inline const Stream& operator<<(const T& text) const noexcept;
-    private:
-      std::ostream* stream;
-      const char* preamble;
-  };
-
-  struct Logger final {
-    inline Logger(void) noexcept;
-    inline Logger(Stream out, Stream err, Stream wrn, Stream log) noexcept;
-    const Stream out = {std::cout, ""};
-    const Stream err = {std::cerr, "error: "};
-    const Stream wrn = {std::cerr, "warning: "};
-    const Stream log = {std::clog, "log: "};
-  };
-}}
-// --Katagrafeas library: backend struct and class member definitions--------------------
-namespace Katagrafeas { namespace Backend
-{
-  Stream::Stream(std::ostream& ostream, const char* preamble) noexcept
-    : // member initialization list
-    stream(&ostream),
-    preamble(preamble)
-  {}
-
-  Stream::Stream(std::ofstream& ofstream, const char* preamble) noexcept
-    : // member initialization list
-    stream(&ofstream),
-    preamble(preamble)
-  {}
-
-  template<typename T>
-  const Stream& Stream::operator<<(const T& text) const noexcept
+  inline namespace Frontend
   {
-    *stream << preamble << text;
+    // default logger
+    struct Logger;
 
-    return *this;
+    // create logger with custom stream names
+    #define KATAGRAFEAS_MAKELOGGER(...)
   }
+// --Katagrafeas library: backend struct and class definitions---------------------------
+  namespace Backend
+  {
+    class Stream final {
+      public:
+        inline Stream(std::ostream& stream) noexcept;
+        template<typename T>
+        inline std::ostream& operator<<(const T& text) const noexcept;
+        // redirect stream (and save its original buffer)
+        inline void redirect(std::ostream& stream) const noexcept;
+        // restore stream's original buffer
+        inline void restore(std::ostream& stream) const noexcept;
+      private:
+        struct Backup {
+          std::ostream* stream;
+          std::streambuf* buffer;
+        };
+        // streams and their original buffer
+        mutable std::vector<Backup> backups_;
+        // destination stream
+        std::ostream& stream_;
+    };
+  }
+// --Katagrafeas library: frontend struct and class definitions--------------------------
+  inline namespace Frontend
+  {
+    struct Logger final {
+      inline Logger(void) noexcept;
+      inline Logger(std::ostream& out, std::ostream& err, std::ostream& wrn, std::ostream& log) noexcept;
+      const Backend::Stream out;
+      const Backend::Stream err;
+      const Backend::Stream wrn;
+      const Backend::Stream log;
+    };
+  }
+// --Katagrafeas library: frontend struct and class member definitions-------------------
+  inline namespace Frontend
+  {
+    Logger::Logger(void) noexcept
+      : // member initialization list
+      out(std::cout),
+      err(std::cerr),
+      wrn(std::cerr),
+      log(std::clog)
+    {}
 
-  Logger::Logger(void) noexcept
-  {}
-
-  Logger::Logger(Stream out, Stream err, Stream wrn, Stream log) noexcept
-    : // member initialization list
-    out(out),
-    err(err),
-    wrn(wrn),
-    log(log)
-  {}
-}}
+    Logger::Logger(std::ostream& out, std::ostream& err, std::ostream& wrn, std::ostream& log) noexcept
+      : // member initialization list
+      out(out),
+      err(err),
+      wrn(wrn),
+      log(log)
+    {}
+  }
 // --Katagrafeas library: frontend definitions-------------------------------------------
-namespace Katagrafeas { inline namespace Frontend
-{
-  #undef  KATAGRAFEAS_MAKELOGGER
-  #define KATAGRAFEAS_MAKELOGGER(...)       \
-    []{                                     \
-      using namespace Katagrafeas::Backend; \
-      struct Logger {                       \
-        const Stream __VA_ARGS__;           \
-      } logger;                             \
-      return logger;                        \
-    }()
-}}
+  inline namespace Frontend
+  {
+    #undef  KATAGRAFEAS_MAKELOGGER
+    #define KATAGRAFEAS_MAKELOGGER(...)       \
+      []{                                     \
+        using namespace Katagrafeas::Backend; \
+        struct Logger {                       \
+          const Stream __VA_ARGS__;           \
+        } logger;                             \
+        return logger;                        \
+      }()
+  }
+// --Katagrafeas library: backend struct and class member definitions--------------------
+  namespace Backend
+  {
+    Stream::Stream(std::ostream& stream) noexcept
+      : // member initialization list
+      stream_(stream)
+    {}
+
+    template<typename T>
+    std::ostream& Stream::operator<<(const T& text) const noexcept
+    {
+      // output to stream
+      return stream_ << text;
+    }
+
+    void Stream::redirect(std::ostream& stream) const noexcept
+    {
+      // backup stream 
+      backups_.push_back(Backup{&stream, stream.rdbuf()});
+
+      // redirect stream
+      stream.rdbuf(stream_.rdbuf());
+    }
+
+    void Stream::restore(std::ostream& stream) const noexcept
+    {
+      // traverse backups backwards
+      for(size_t i = backups_.size() - 1; i < backups_.size(); --i) {
+        // find stream in list
+        if (backups_[i].stream == &stream) {
+          // restore buffer
+          stream.rdbuf(backups_[i].buffer);
+
+          // remove from backup list
+          backups_.erase(backups_.begin() + i);
+
+          return;
+        }
+      }
+      
+      // if we end up here it's because the stream is not part of the backup list
+      std::cerr << "error: Stream: couldn't restore stream; stream not found in backups\n";
+    }
+  }
+}
 #endif
