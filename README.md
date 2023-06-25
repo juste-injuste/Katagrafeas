@@ -5,6 +5,8 @@
 
 Katagrafeas is a simple and lightweight C++11 (and newer) library that allows you easily redirect streams towards a common destination.
 
+---
+
 ## Usage
 
 Katagrafeas offers two ways to measure elapsed time:
@@ -13,15 +15,9 @@ Katagrafeas offers two ways to measure elapsed time:
 
 ---
 
-## Installation
+## Examples
 
-Katagrafeas is a header-only library. To use it in your C++ project, simply `#include` the [Katagrafeas.hpp](include/Katagrafeas.hpp) header file.
-
-## Disclosure
-
-
-## Details
-
+---
 
 ## Version
 
@@ -33,13 +29,33 @@ The current version defines the following macros:
 #define KATAGRAFEAS_VERSION_PATCH 0
 ```
 
-### History
+---
 
-Version 1.0: initial release
+## Details
+
+---
+
+## Disclosure
+
+---
+
+## History
+
+Version 1.0.0 - initial release
+
+---
+
+## Installation
+
+Katagrafeas is a header-only library. To use it in your C++ project, simply `#include` the [Katagrafeas.hpp](include/Katagrafeas.hpp) header file.
+
+---
 
 ## License
 
 Katagrafeas is released under the MIT License. See the [LICENSE](LICENSE) file for more details.
+
+---
 
 ## Author
 

@@ -47,23 +47,16 @@ streams towards a common destination. See the included README.MD file for more i
 //---Katagrafeas library---------------------------------------------------------------------------
 namespace Katagrafeas
 {
-  // library version
-  #define KATAGRAFEAS_VERSION       001000000L
-  #define KATAGRAFEAS_VERSION_MAJOR 1
-  #define KATAGRAFEAS_VERSION_MINOR 0
-  #define KATAGRAFEAS_VERSION_PATCH 0
 //---Katagrafeas library: frontend forward declarations--------------------------------------------
   inline namespace Frontend
   {
-    // default logger
-    struct Logger;
+    // library version
+    #define KATAGRAFEAS_VERSION       001000000L
+    #define KATAGRAFEAS_VERSION_MAJOR 1
+    #define KATAGRAFEAS_VERSION_MINOR 0
+    #define KATAGRAFEAS_VERSION_PATCH 0
 
-    // create logger with custom stream names
-    #define KATAGRAFEAS_MAKELOGGER(...)
-  }
-//---Katagrafeas library: backend struct and class definitions-------------------------------------
-  namespace Backend
-  {
+    // allows easy ostream redirection
     class Stream final {
       public:
         inline Stream(std::ostream& stream) noexcept;
@@ -87,46 +80,6 @@ namespace Katagrafeas
   }
 //---Katagrafeas library: frontend definitions-----------------------------------------------------
   inline namespace Frontend
-  {
-    struct Logger final {
-      inline Logger(std::ostream& out = std::cout,
-                    std::ostream& err = std::cerr,
-                    std::ostream& wrn = std::cerr,
-                    std::ostream& log = std::clog,
-                    std::ostream& dbg = std::clog) noexcept;
-      // output stream
-      const Backend::Stream out;
-      // error stream
-      const Backend::Stream err;
-      // warning stream
-      const Backend::Stream wrn;
-      // general log stream
-      const Backend::Stream log;
-      // debug stream
-      const Backend::Stream dbg;
-    };
-
-    Logger::Logger(std::ostream& out, std::ostream& err, std::ostream& wrn,
-                   std::ostream& log, std::ostream& dbg) noexcept
-      : // member initialization list
-      out(out),
-      err(err),
-      wrn(wrn),
-      log(log),
-      dbg(dbg)
-    {}
-
-    #undef  KATAGRAFEAS_MAKELOGGER
-    #define KATAGRAFEAS_MAKELOGGER(...)      \
-      []{                                    \
-        struct Logger {                      \
-          const Backend::Stream __VA_ARGS__; \
-        } logger;                            \
-        return logger;                       \
-      }()
-  }
-//---Katagrafeas library: backend struct and class member definitions------------------------------
-  namespace Backend
   {
     Stream::Stream(std::ostream& stream) noexcept
       : // member initialization list
