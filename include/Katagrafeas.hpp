@@ -30,7 +30,7 @@ SOFTWARE.
  
 -----versions--------------------------------------------------------------------------------------
 
-version 1.0 initial release
+Version 1.0.0 - Initial release
 
 -----description-----------------------------------------------------------------------------------
 
@@ -43,7 +43,6 @@ streams towards a common destination. See the included README.MD file for more i
 //---necessary standard libraries------------------------------------------------------------------
 #include <iosfwd>
 #include <iostream>
-#include <fstream>
 #include <vector>
 //---Katagrafeas library---------------------------------------------------------------------------
 namespace Katagrafeas
@@ -170,7 +169,7 @@ namespace Katagrafeas
       }
 
       // if we end up here it's because the stream is not part of the backup list
-      std::cerr << "error: Stream: couldn't restore stream; stream not found in backups\n";
+      std::cerr << "error: Stream: couldn't restore ostream; ostream not found in backups\n";
     }
   }
 }
