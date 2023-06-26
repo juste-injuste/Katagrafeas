@@ -41,9 +41,12 @@ streams towards a common destination. See the included README.MD file for more i
 #ifndef KATAGRAFEAS_HPP
 #define KATAGRAFEAS_HPP
 //---necessary standard libraries------------------------------------------------------------------
-#include <iosfwd>
-#include <iostream>
-#include <vector>
+#include <ostream>   // for std::ostream
+#include <streambuf> // for std::streambuf
+#include <iostream>  // for std::cerr
+#include <vector>    // for std::vector
+#include <cstddef>   // for size_t
+#include <string>    // for std::string
 //---Katagrafeas library---------------------------------------------------------------------------
 namespace Katagrafeas
 {
@@ -57,61 +60,75 @@ namespace Katagrafeas
     #define KATAGRAFEAS_VERSION_PATCH 0
 
     // allows easy ostream redirection
-    class Stream final {
+    class Stream final : public std::streambuf {
       public:
-        inline Stream(std::ostream& stream) noexcept;
+        inline Stream(std::ostream& ostream, std::string prefix = "", std::string postfix = "") noexcept;
+        inline ~Stream() noexcept;
+        // redirect stream (and backup its original buffer)
+        inline void link(std::ostream& ostream) noexcept;
+        // restore stream's original buffer
+        void restore(std::ostream& ostream) noexcept;
         // output to stream directly
         template<typename T>
-        inline const Stream& operator<<(const T& text) const noexcept;
-        // redirect stream (and backup its original buffer)
-        inline void link(std::ostream& stream) const noexcept;
-        // restore stream's original buffer
-        inline void restore(std::ostream& stream) const noexcept;
+        inline std::ostream& operator<<(const T& text) const noexcept;
+        // manipulator specialization
+        inline std::ostream& operator<<(std::ostream& (*manipulator)(std::ostream&)) const noexcept;
+      protected:
+        virtual int_type overflow(int_type c) override;
+        virtual int sync() override;
       private:
+        //
+        signed level;
+        // ostream with backuped buffer
         struct Backup {
-          std::ostream* stream;
+          std::ostream* ostream;
           std::streambuf* buffer;
         };
-        // streams and their original buffer
-        mutable std::vector<Backup> backups_;
-        // output stream
-        std::ostream& stream_;
+        // linked ostream backups
+        std::vector<Backup> backups_;
+        // output buffer
+        std::streambuf* buffer_;
+        mutable std::ostream ostream_;
+        bool prepend_;
+        const std::string prefix_;
+        const std::string postfix_;
     };
   }
 //---Katagrafeas library: frontend definitions-----------------------------------------------------
   inline namespace Frontend
   {
-    Stream::Stream(std::ostream& stream) noexcept
+    Stream::Stream(std::ostream& ostream, std::string prefix, std::string postfix) noexcept
       : // member initialization list
-      stream_(stream)
+      buffer_(ostream.rdbuf()),
+      ostream_(this),
+      prepend_(true),
+      prefix_(prefix),
+      postfix_(postfix)
     {}
 
-    template<typename T>
-    const Stream& Stream::operator<<(const T& text) const noexcept
+    Stream::~Stream() noexcept
     {
-      // output to stream
-      stream_ << text;
-      
-      return *this;
+      for(Backup backup : backups_)
+        backup.ostream->rdbuf(backup.buffer);
     }
 
-    void Stream::link(std::ostream& stream) const noexcept
+    void Stream::link(std::ostream& ostream) noexcept
     {
       // backup stream 
-      backups_.push_back(Backup{&stream, stream.rdbuf()});
+      backups_.push_back(Backup{&ostream, ostream.rdbuf()});
 
       // redirect stream
-      stream.rdbuf(stream_.rdbuf());
+      ostream.rdbuf(this);
     }
 
-    void Stream::restore(std::ostream& stream) const noexcept
+    void Stream::restore(std::ostream& ostream) noexcept
     {
       // traverse backups backwards
       for(size_t i = backups_.size() - 1; i < backups_.size(); --i) {
         // find stream in backups
-        if (backups_[i].stream == &stream) {
+        if (backups_[i].ostream == &ostream) {
           // restore buffer
-          stream.rdbuf(backups_[i].buffer);
+          ostream.rdbuf(backups_[i].buffer);
 
           // remove from backup list
           backups_.erase(backups_.begin() + i);
@@ -121,8 +138,44 @@ namespace Katagrafeas
         }
       }
 
-      // if we end up here it's because the stream is not part of the backup list
+      // if we end up here it's because the ostream is not part of the backup list
       std::cerr << "error: Stream: couldn't restore ostream; ostream not found in backups\n";
+    }
+
+    template<typename T>
+    std::ostream& Stream::operator<<(const T& text) const noexcept
+    {
+      // output to stream
+      return ostream_ << text;
+    }
+
+    std::ostream& Stream::operator<<(std::ostream& (*manipulator)(std::ostream&)) const noexcept
+    {
+      // apply manipulator
+      return manipulator(ostream_);
+    }
+    
+    Stream::int_type Stream::overflow(int_type c)
+    {
+      if (c != traits_type::eof()) {
+        if (prepend_) {
+          buffer_->sputn(prefix_.c_str(), prefix_.length());
+          prepend_ = false;
+        }
+
+        else if (c == '\n') {
+          buffer_->sputn(postfix_.c_str(), postfix_.length());
+        }
+
+        return buffer_->sputc(c);
+      }
+
+      return c;
+    }
+
+    int Stream::sync() {
+      prepend_ = true;
+      return buffer_->pubsync();
     }
   }
 }
