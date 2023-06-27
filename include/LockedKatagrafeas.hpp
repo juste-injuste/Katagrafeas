@@ -48,7 +48,7 @@ streams towards a common destination. See the included README.MD file for more i
 #include <cstddef>   // for size_t
 #include <string>    // for std::string
 #include <memory>    // for std::unique_ptr
-#include <mutex>     // for std::mutex, std::lock_guard
+#include <mutex>
 //---Katagrafeas library---------------------------------------------------------------------------
 namespace Katagrafeas
 {
@@ -95,7 +95,7 @@ namespace Katagrafeas
         //inline int_type overflow(int_type c, Backend::Interceptor* interceptor);
       private:
         //
-        mutable std::mutex mutex_;
+        std::mutex mutex_;
         //
         std::vector<std::unique_ptr<Backend::Interceptor>> backups_;
         // debate
@@ -157,8 +157,10 @@ namespace Katagrafeas
 
     void Stream::link(std::ostream& ostream, const char* prefix, const char* suffix) noexcept
     {
-      // create and store interceptor (managed by std::unique_ptr)
+      // create interceptor (managed by std::unique_ptr)
       Backend::Interceptor* interceptor = new Backend::Interceptor(this, ostream, prefix, suffix);
+
+      // store interceptor 
       backups_.push_back(std::unique_ptr<Backend::Interceptor>(interceptor));
 
       // redirect towards the interceptor
@@ -192,7 +194,7 @@ namespace Katagrafeas
       // lock ostream_
       const std::lock_guard<std::mutex> guard{mutex_};
 
-      // output to stream
+      // write to ostream_
       return ostream_ << text;
     }
 
@@ -201,7 +203,7 @@ namespace Katagrafeas
       // lock ostream_
       const std::lock_guard<std::mutex> guard{mutex_};
 
-      // apply manipulator
+      // apply manipulator to ostream_
       return manipulator(ostream_);
     }
     
