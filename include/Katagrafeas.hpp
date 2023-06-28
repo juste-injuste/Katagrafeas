@@ -48,7 +48,7 @@ streams towards a common destination. See the included README.MD file for more i
 #include <cstddef>   // for size_t
 #include <string>    // for std::string
 #include <memory>    // for std::unique_ptr
-#include <mutex>     // for std::mutex, std::lock_guard
+#include <regex>
 //---Katagrafeas library---------------------------------------------------------------------------
 namespace Katagrafeas
 {
@@ -69,6 +69,10 @@ namespace Katagrafeas
   {
     // intercept individual ostreams to use a unique prefix and suffix
     class Interceptor;
+
+    void parse_datetime(std::string& string) noexcept;
+
+    size_t find_pos(const std::string& string, const std::string& pattern) noexcept;
   }
 // --Katagrafeas library: frontend struct and class definitions------------------------------------
   inline namespace Frontend
@@ -94,11 +98,8 @@ namespace Katagrafeas
       private:
         //inline int_type overflow(int_type c, Backend::Interceptor* interceptor);
       private:
-        //
-        mutable std::mutex mutex_;
-        //
+        // 
         std::vector<std::unique_ptr<Backend::Interceptor>> backups_;
-        // debate
         // output buffer
         std::streambuf* buffer_;
         // ostream linked to the output buffer
@@ -189,18 +190,12 @@ namespace Katagrafeas
     template<typename T>
     std::ostream& Stream::operator<<(const T& text) noexcept
     {
-      // lock ostream_
-      const std::lock_guard<std::mutex> guard{mutex_};
-
       // output to stream
       return ostream_ << text;
     }
 
     std::ostream& Stream::operator<<(std::ostream& (*manipulator)(std::ostream&)) noexcept
     {
-      // lock ostream_
-      const std::lock_guard<std::mutex> guard{mutex_};
-
       // apply manipulator
       return manipulator(ostream_);
     }
@@ -282,6 +277,23 @@ namespace Katagrafeas
     int Interceptor::sync()
     {
       return stream->sync();
+    }
+  }
+// --Katagrafeas library: backend definitions------------------------------------------------------
+  namespace Backend
+  {
+    void parse_datetime(std::string& string) noexcept
+    {
+
+    }
+
+    size_t find_pos(const std::string& string, const std::string& pattern) noexcept
+    {
+      // find position of first occurence
+      size_t pos = string.find(pattern);
+
+      // validate it is the only occurence
+      return (pos == string.rfind(pattern)) ? pos : std::string::npos;
     }
   }
 }
