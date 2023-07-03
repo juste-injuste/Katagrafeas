@@ -86,13 +86,13 @@ namespace Katagrafeas
         void link(std::ostream& ostream, const char* prefix = "", const char* suffix = "") noexcept;
         // restore ostream's original buffer
         void restore(std::ostream& ostream) noexcept;
-        // output to stream directly
+        // output to ostream
         template<typename T>
         inline std::ostream& operator<<(const T& text) noexcept;
-        // manipulator specialization
+        // apply manipulator to ostream
         inline std::ostream& operator<<(std::ostream& (*manipulator)(std::ostream&)) noexcept;
       protected:
-        // overloaded std::streambuf methods that allow prefixing and suffixing
+        // overloaded std::streambuf methods to allow prefixing and suffixing
         inline virtual int_type overflow(int_type c) override;
         inline virtual int sync() override;
       private:
