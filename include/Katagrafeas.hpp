@@ -158,9 +158,11 @@ namespace Katagrafeas
 
     void Stream::link(std::ostream& ostream, const char* prefix, const char* suffix) noexcept
     {
-      // create and store interceptor (managed by std::unique_ptr)
+      // create interceptor
       Backend::Interceptor* interceptor = new Backend::Interceptor(this, ostream, prefix, suffix);
-      backups_.push_back(std::unique_ptr<Backend::Interceptor>(interceptor));
+
+      // store and own interceptor (via std::unique_ptr)
+      backups_.emplace_back(interceptor);
 
       // redirect towards the interceptor
       ostream.rdbuf(interceptor);
