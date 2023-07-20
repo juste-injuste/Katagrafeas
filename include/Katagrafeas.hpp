@@ -96,8 +96,6 @@ namespace Katagrafeas
         inline virtual int_type overflow(int_type c) override;
         inline virtual int sync() override;
       private:
-        //inline int_type overflow(int_type c, Backend::Interceptor* interceptor);
-      private:
         // 
         std::vector<std::unique_ptr<Backend::Interceptor>> backups_;
         // output buffer
@@ -224,26 +222,6 @@ namespace Katagrafeas
       prepend_ = true;
       return buffer_->pubsync();
     }
-    
-    /*
-    Stream::int_type Stream::overflow(int_type c, Backend::Interceptor* interceptor)
-    {
-      if (c == traits_type::eof())
-        return c;
-
-      if (prepend_) {
-        buffer_->sputn(prefix_.c_str(), prefix_.length());
-        buffer_->sputn(interceptor->prefix_.c_str(), interceptor->prefix_.length());
-        prepend_ = false;
-      }
-      else if (c == '\n') {
-        buffer_->sputn(interceptor->suffix_.c_str(), interceptor->suffix_.length());
-        buffer_->sputn(suffix_.c_str(), suffix_.length());
-      }
-
-      return buffer_->sputc(c);
-    }
-    //*/
   }
 // --Katagrafeas library: backend struct and class member definitions------------------------------
   namespace Backend
