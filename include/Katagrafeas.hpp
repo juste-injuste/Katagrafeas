@@ -51,6 +51,10 @@ streams towards a common destination. See the included README.MD file for more i
 #include <functional> // for std::function
 #include <utility>    // for std::pair
 #include <chrono>
+#include <sstream>
+#include <iomanip>    // for std::put_time
+#include <array>
+#include <ctime>
 //---Katagrafeas library----------------------------------------------------------------------------
 namespace Katagrafeas
 {
@@ -70,22 +74,48 @@ namespace Katagrafeas
 //---Katagrafeas library: backend forward declarations----------------------------------------------
   namespace Backend
   {
+    // 
+    class DateTime;
+
     // intercept individual ostreams to use a unique prefix and suffix
     class Interceptor;
-
-    //
-    enum class Pattern {
-      YY,
-      MM,
-      DD,
-      hh,
-      mm,
-      ss
+  }
+// --Katagrafeas library: backend struct and class definitions--------------------------------------
+  namespace Backend
+  {
+    class Interceptor final : public std::streambuf {
+      private:
+        inline Interceptor(Stream* stream, std::ostream& ostream, const char* prefix, const char* suffix) noexcept;
+        // associated Stream instance
+        Stream* const stream;
+        // kept track of so it can be restored later
+        std::ostream* const redirected_ostream;
+        // buffer of redirected_ostream before it was redirected
+        std::streambuf* const original_buffer;
+        // prefix for new messages
+        const std::string prefix_;
+        // suffix for newlines
+        const std::string suffix_;
+      protected:
+        // intercept character and forward it to streambuf
+        inline virtual int_type overflow(int_type c) override;
+        // intercept sync and forward it to Stream
+        inline virtual int sync() override;
+      friend class Frontend::Stream;
     };
-    
-    std::function<std::string(void)> parse_datetime(std::string string) noexcept;
 
-    size_t find_pattern_position(const std::string& string, const std::string& pattern) noexcept;
+    class DateTime final {
+      public:
+        DateTime(const char* format) noexcept;
+        //
+        std::string get() const;
+        const size_t length;
+      private:
+        mutable std::string string_;
+        std::string specialized_format_;
+        bool needs_formatting_;
+        std::array<size_t, 6> positions_;
+    };
   }
 // --Katagrafeas library: frontend struct and class definitions-------------------------------------
   inline namespace Frontend
@@ -118,36 +148,12 @@ namespace Katagrafeas
         // underlying ostream linked to the output buffer
         std::ostream ostream_;
         // prefix for new messages
-        const std::string prefix_;
+        const Backend::DateTime prefix_;
         // suffix for newlines
-        const std::string suffix_;
+        const Backend::DateTime suffix_;
         // prepending flag
         bool prepend_;
       friend class Backend::Interceptor;
-    };
-  }
-// --Katagrafeas library: backend struct and class definitions--------------------------------------
-  namespace Backend
-  {
-    class Interceptor final : public std::streambuf {
-      private:
-        inline Interceptor(Stream* stream, std::ostream& ostream, const char* prefix, const char* suffix) noexcept;
-        // associated Stream instance
-        Stream* const stream;
-        // kept track of so it can be restored later
-        std::ostream* const redirected_ostream;
-        // buffer of redirected_ostream before it was redirected
-        std::streambuf* const original_buffer;
-        // prefix for new messages
-        const std::string prefix_;
-        // suffix for newlines
-        const std::string suffix_;
-      protected:
-        // intercept character and forward it to streambuf
-        inline virtual int_type overflow(int_type c) override;
-        // intercept sync and forward it to Stream
-        inline virtual int sync() override;
-      friend class Frontend::Stream;
     };
   }
 // --Katagrafeas library: frontend struct and class member definitions------------------------------
@@ -226,12 +232,12 @@ namespace Katagrafeas
         return c;
 
       if (prepend_) {
-        buffer_->sputn(prefix_.c_str(), prefix_.length());
+        buffer_->sputn(prefix_.get().c_str(), prefix_.length);
         prepend_ = false;
       }
 
       else if (c == '\n') {
-        buffer_->sputn(suffix_.c_str(), suffix_.length());
+        buffer_->sputn(suffix_.get().c_str(), suffix_.length);
       }
 
       return buffer_->sputc(c);
@@ -261,14 +267,14 @@ namespace Katagrafeas
         return c;
 
       if (stream->prepend_) {
-        stream->buffer_->sputn(stream->prefix_.c_str(), stream->prefix_.length());
+        stream->buffer_->sputn(stream->prefix_.get().c_str(), stream->prefix_.length);
         stream->buffer_->sputn(prefix_.c_str(), prefix_.length());
         stream->prepend_ = false;
       }
 
       else if (c == '\n') {
         stream->buffer_->sputn(suffix_.c_str(), suffix_.length());
-        stream->buffer_->sputn(stream->suffix_.c_str(), stream->suffix_.length());
+        stream->buffer_->sputn(stream->suffix_.get().c_str(), stream->suffix_.length);
       }
 
       return stream->buffer_->sputc(c);
@@ -278,72 +284,54 @@ namespace Katagrafeas
     {
       return stream->sync();
     }
-std::function<std::string(void)> get_datatime_parser(std::string string) noexcept {
-    std::vector<std::pair<Pattern, size_t>> replacement_list;
 
-    size_t YY_pos = find_pattern_position(string, "YY");
-    if (YY_pos != std::string::npos)
-        replacement_list.emplace_back(Pattern::YY, YY_pos);
-
-    size_t MM_pos = find_pattern_position(string, "MM");
-    if (MM_pos != std::string::npos)
-        replacement_list.emplace_back(Pattern::MM, MM_pos);
-
-    size_t DD_pos = find_pattern_position(string, "DD");
-    if (DD_pos != std::string::npos)
-        replacement_list.emplace_back(Pattern::DD, DD_pos);
-
-    size_t hh_pos = find_pattern_position(string, "hh");
-    if (hh_pos != std::string::npos)
-        replacement_list.emplace_back(Pattern::hh, hh_pos);
-
-    size_t mm_pos = find_pattern_position(string, "mm");
-    if (mm_pos != std::string::npos)
-        replacement_list.emplace_back(Pattern::mm, mm_pos);
-
-    size_t ss_pos = find_pattern_position(string, "ss");
-    if (ss_pos != std::string::npos)
-        replacement_list.emplace_back(Pattern::ss, ss_pos);
-
-    return [=]() -> std::string {
-        std::string new_string = string;
-        auto now = std::chrono::system_clock::now();
-        std::time_t time = std::chrono::system_clock::to_time_t(now);
-        std::tm* time_info = std::localtime(&time);
-        
-        for (const auto& pattern : replacement_list) {
-            switch (pattern.first) {
-                case Pattern::YY:
-                    new_string.replace(pattern.second, 2, std::to_string(time_info->tm_year + 1900).substr(2, 2));
-                    continue;
-                case Pattern::MM:
-                    new_string.replace(pattern.second, 2, std::to_string(time_info->tm_mon + 1001).substr(2, 2));
-                    continue;
-                case Pattern::DD:
-                    new_string.replace(pattern.second, 2, std::to_string(time_info->tm_mday + 1000).substr(2, 2));
-                    continue;
-                case Pattern::hh:
-                    new_string.replace(pattern.second, 2, std::to_string(time_info->tm_hour + 1000).substr(2, 2));
-                    continue;
-                case Pattern::mm:
-                    new_string.replace(pattern.second, 2, std::to_string(time_info->tm_min + 1000).substr(2, 2));
-                    continue;
-                case Pattern::ss:
-                    new_string.replace(pattern.second, 2, std::to_string(time_info->tm_sec + 1000).substr(2, 2));
-                    continue;
-            }
-        }
-        return new_string;
-    };
-}
-
-    size_t find_pattern_position(const std::string& string, const std::string& pattern) noexcept
+    DateTime::DateTime(const char* format) noexcept
+      : // member initialization list
+      length(string_.length()),
+      string_(format),
+      specialized_format_("            "),
+      needs_formatting_(false),
+      positions_()
     {
-      // find position of first occurence
-      size_t pos = string.find(pattern);
+      static const std::string patterns = "%y%m%d%H%M%S";
 
-      // validate it is the only occurence
-      return (pos == string.rfind(pattern)) ? pos : std::string::npos;
+      // build specialized_format string
+      for (size_t k = 0; k < 6; ++k) {
+        // extract current pattern
+        std::string&& pattern = patterns.substr(k << 1, 2);
+
+        // save pattern position
+        positions_[k] = string_.find(pattern);
+
+        /*
+        if (positions[k] != string.rfind(pattern))  
+          positions[k] = std::string::npos;
+        //*/
+
+        // save the pattern if it was found
+        if (positions_[k] != std::string::npos) {
+          specialized_format_.replace(k << 1, 2, pattern);
+          needs_formatting_ = true;
+        }
+      }
+    }
+
+    std::string DateTime::get() const
+    {
+      if (needs_formatting_ == true) {
+        std::time_t time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+        std::stringstream time_stream;
+        time_stream << std::put_time(std::localtime(&time), specialized_format_.c_str());
+        std::string time_as_string = time_stream.str();
+        
+        for (size_t k = 0; k < 6; ++k) {
+          size_t position = positions_[k];
+          if (position != std::string::npos)
+            string_.replace(position, 2, time_as_string.substr(k << 1, 2));
+        }
+      }
+
+      return string_;
     }
   }
 }
