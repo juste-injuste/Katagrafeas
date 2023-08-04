@@ -78,8 +78,11 @@ namespace Katagrafeas
     // intercept individual ostreams to use a unique prefix and suffix
     class Interceptor;
 
-    // return time-formatted string
-    std::string format_string(const char* format);
+    // return type of std::put_time
+    using put_time_t = decltype(std::put_time(nullptr, ""));
+
+    // return formated
+    inline put_time_t format_string(const char* format);
   }
 // --Katagrafeas library: backend struct and class definitions--------------------------------------
   namespace Backend
@@ -108,7 +111,7 @@ namespace Katagrafeas
 // --Katagrafeas library: frontend struct and class definitions-------------------------------------
   inline namespace Frontend
   {
-    class Stream final : public std::streambuf {
+    class Stream final {
       public:
         inline Stream(std::ostream& ostream, const char* prefix = "", const char* suffix = "") noexcept;
         // restore all ostreams orginal buffer
@@ -124,10 +127,6 @@ namespace Katagrafeas
         inline std::ostream& operator<<(const T& text) noexcept;
         // apply manipulator to ostream
         inline std::ostream& operator<<(std::ostream& (*manipulator)(std::ostream&)) noexcept;
-      protected:
-        // overloaded std::streambuf methods to allow prefixing and suffixing
-        inline virtual int_type overflow(int_type c) override;
-        inline virtual int sync() override;
       private:
         // store intercepted ostreams
         std::vector<std::unique_ptr<Backend::Interceptor>> backups_;
@@ -150,7 +149,7 @@ namespace Katagrafeas
     Stream::Stream(std::ostream& ostream, const char* prefix, const char* suffix) noexcept
       : // member initialization list
       buffer_(ostream.rdbuf()),
-      ostream_(this),
+      ostream_(buffer_),
       prefix_(prefix),
       suffix_(suffix),
       prepend_(true)
@@ -205,37 +204,13 @@ namespace Katagrafeas
     std::ostream& Stream::operator<<(const T& text) noexcept
     {
       // output to stream
-      return ostream_ << text;
+      return ostream_ << Backend::format_string(prefix_) << text;
     }
 
     std::ostream& Stream::operator<<(std::ostream& (*manipulator)(std::ostream&)) noexcept
     {
       // apply manipulator
       return manipulator(ostream_);
-    }
-    
-    Stream::int_type Stream::overflow(int_type c)
-    {
-      if (c == traits_type::eof())
-        return c;
-
-      if (prepend_) {
-        std::string prefix = Backend::format_string(prefix_);
-        buffer_->sputn(prefix.c_str(), prefix.length());
-        prepend_ = false;
-      }
-      else if (c == '\n') {
-        std::string suffix = Backend::format_string(suffix_);
-        buffer_->sputn(suffix.c_str(), suffix.length());
-      }
-
-      return buffer_->sputc(c);
-    }
-
-    int Stream::sync() {
-      // buffer will get flushed, 
-      prepend_ = true;
-      return buffer_->pubsync();
     }
   }
 // --Katagrafeas library: backend struct and class member definitions-------------------------------
@@ -252,19 +227,12 @@ namespace Katagrafeas
 
     Interceptor::int_type Interceptor::overflow(int_type c)
     {
-      if (c == traits_type::eof())
-        return c;
-
       if (stream->prepend_) {
-        std::string stream_prefix = Backend::format_string(stream->prefix_);
-        stream->buffer_->sputn(stream_prefix.c_str(), stream_prefix.length());
-        stream->buffer_->sputn(prefix_.c_str(), prefix_.length());
         stream->prepend_ = false;
+        stream->ostream_ << Backend::format_string(stream->prefix_) << prefix_;
       }
       else if (c == '\n') {
-        stream->buffer_->sputn(suffix_.c_str(), suffix_.length());
-        std::string stream_suffix = Backend::format_string(stream->suffix_);
-        stream->buffer_->sputn(stream_suffix.c_str(), stream_suffix.length());
+        stream->ostream_ << suffix_ << Backend::format_string(stream->suffix_);
       }
 
       return stream->buffer_->sputc(c);
@@ -272,15 +240,14 @@ namespace Katagrafeas
 
     int Interceptor::sync()
     {
-      return stream->sync();
+      stream->prepend_ = true;
+      return stream->buffer_->pubsync();
     }
 
-    std::string format_string(const char* format)
+    put_time_t format_string(const char* format)
     {
       std::time_t time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-      std::stringstream datetime_stream;
-      datetime_stream << std::put_time(std::localtime(&time), format);
-      return datetime_stream.str();
+      return std::put_time(std::localtime(&time), format);
     }
   }
 }
