@@ -48,14 +48,9 @@ streams towards a common destination. See the included README.MD file for more i
 #include <cstddef>    // for size_t
 #include <string>     // for std::string
 #include <memory>     // for std::unique_ptr
-#include <functional> // for std::function
-#include <utility>    // for std::pair
-#include <chrono>
-#include <sstream>
+#include <chrono>     // for std::chrono::system_clock::now, std::chrono::system_clock::to_time_t
 #include <iomanip>    // for std::put_time
-#include <array>
-#include <ctime>
-#include <cstring>
+#include <ctime>      // for std::localtime, std::time_t
 //---Katagrafeas library----------------------------------------------------------------------------
 namespace Katagrafeas
 {
@@ -79,23 +74,23 @@ namespace Katagrafeas
     class Interceptor;
 
     // return type of std::put_time
-    using put_time_t = decltype(std::put_time(nullptr, ""));
+    using Formatted = decltype(std::put_time((const std::tm*) nullptr, (const char*) nullptr));
 
-    // return formated
-    inline put_time_t format_string(const char* format);
+    // return time formated string
+    inline Formatted format_string(const char* format);
   }
 // --Katagrafeas library: backend struct and class definitions--------------------------------------
   namespace Backend
   {
-    class Interceptor final : public std::streambuf {
+    class Interceptor final : public std::streambuf{
       private:
         inline Interceptor(Stream* stream, std::ostream& ostream, const char* prefix, const char* suffix) noexcept;
         // associated Stream instance
         Stream* const stream;
         // kept track of so it can be restored later
-        std::ostream* const redirected_ostream;
-        // buffer of redirected_ostream before it was redirected
-        std::streambuf* const original_buffer;
+        std::ostream* const redirected_ostream_;
+        // buffer of redirected_ostream_ before it was redirected
+        std::streambuf* const original_buffer_;
         // prefix for new messages
         const std::string prefix_;
         // suffix for newlines
@@ -174,12 +169,13 @@ namespace Katagrafeas
 
     void Stream::restore(std::ostream& ostream) noexcept
     {
-      // traverse backups backwards
-      for(size_t i = backups_.size() - 1; i < backups_.size(); --i) {
-        // find ostream in backups
-        if (backups_[i]->redirected_ostream == &ostream) {
+      // find ostream in backups
+      for(size_t i = backups_.size() - 1; i < backups_.size(); --i)
+      {
+        if (backups_[i]->redirected_ostream_ == &ostream)
+        {
           // restore streambuf
-          ostream.rdbuf(backups_[i]->original_buffer);
+          ostream.rdbuf(backups_[i]->original_buffer_);
 
           // remove from backup list
           backups_.erase(backups_.begin() + i);
@@ -197,7 +193,9 @@ namespace Katagrafeas
     {
       // restore all ostreams
       for(std::unique_ptr<Backend::Interceptor>& backup : backups_)
-        backup->redirected_ostream->rdbuf(backup->original_buffer);
+      {        
+        backup->redirected_ostream_->rdbuf(backup->original_buffer_);
+      }
     }
 
     template<typename T>
@@ -215,23 +213,25 @@ namespace Katagrafeas
   }
 // --Katagrafeas library: backend struct and class member definitions-------------------------------
   namespace Backend
-  {    
+  {
     Interceptor::Interceptor(Stream* stream, std::ostream& ostream, const char* prefix, const char* suffix) noexcept
       : // member initialization list
       stream(stream),
-      redirected_ostream(&ostream),
-      original_buffer(ostream.rdbuf()),
+      redirected_ostream_(&ostream),
+      original_buffer_(ostream.rdbuf()),
       prefix_(prefix),
       suffix_(suffix)
     {}
 
     Interceptor::int_type Interceptor::overflow(int_type c)
     {
-      if (stream->prepend_) {
+      if (stream->prepend_)
+      {
         stream->prepend_ = false;
         stream->ostream_ << Backend::format_string(stream->prefix_) << prefix_;
       }
-      else if (c == '\n') {
+      else if (c == '\n')
+      {
         stream->ostream_ << suffix_ << Backend::format_string(stream->suffix_);
       }
 
@@ -244,7 +244,7 @@ namespace Katagrafeas
       return stream->buffer_->pubsync();
     }
 
-    put_time_t format_string(const char* format)
+    Formatted format_string(const char* format)
     {
       std::time_t time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
       return std::put_time(std::localtime(&time), format);
