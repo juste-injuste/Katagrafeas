@@ -82,13 +82,15 @@ namespace Katagrafeas
 // --Katagrafeas library: backend struct and class definitions--------------------------------------
   namespace Backend
   {
-    class Interceptor final : public std::streambuf{
+    class Interceptor final : public std::streambuf {
       private:
         inline Interceptor(Stream* stream, std::ostream& ostream, const char* prefix, const char* suffix) noexcept;
-        // associated Stream instance
-        Stream* const stream;
+        // restore original buffer
+        inline ~Interceptor() noexcept;
         // kept track of so it can be restored later
         std::ostream* const redirected_ostream_;
+        // associated Stream instance
+        Stream* const stream;
         // buffer of redirected_ostream_ before it was redirected
         std::streambuf* const original_buffer_;
         // prefix for new messages
@@ -116,7 +118,7 @@ namespace Katagrafeas
         // restore ostream's original buffer
         void restore(std::ostream& ostream) noexcept;
         // restore all ostreams orginal buffer
-        void restore_all(void) noexcept;
+        inline void restore_all(void) noexcept;
         // output to ostream
         template<typename T>
         inline std::ostream& operator<<(const T& text) noexcept;
@@ -169,15 +171,15 @@ namespace Katagrafeas
 
     void Stream::restore(std::ostream& ostream) noexcept
     {
-      // find ostream in backups
-      for(size_t i = backups_.size() - 1; i < backups_.size(); --i)
+      // amount of backups
+      const size_t n = backups_.size();
+
+      // look for ostream in backups and delete it
+      for(size_t i = n - 1; i < n; --i)
       {
         if (backups_[i]->redirected_ostream_ == &ostream)
         {
-          // restore streambuf
-          ostream.rdbuf(backups_[i]->original_buffer_);
-
-          // remove from backup list
+          // delete from backup list (destructor restores buffer)
           backups_.erase(backups_.begin() + i);
 
           // stream was restored, no more work is necessary
@@ -191,11 +193,8 @@ namespace Katagrafeas
 
     void Stream::restore_all(void) noexcept
     {
-      // restore all ostreams
-      for(std::unique_ptr<Backend::Interceptor>& backup : backups_)
-      {        
-        backup->redirected_ostream_->rdbuf(backup->original_buffer_);
-      }
+      // restore all ostreams (destructor restores buffer)
+      backups_.clear();
     }
 
     template<typename T>
@@ -222,6 +221,11 @@ namespace Katagrafeas
       prefix_(prefix),
       suffix_(suffix)
     {}
+
+    Interceptor::~Interceptor() noexcept
+    {
+      redirected_ostream_->rdbuf(original_buffer_);
+    }
 
     Interceptor::int_type Interceptor::overflow(int_type c)
     {
