@@ -43,23 +43,22 @@ streams towards a common destination. See the included README.MD file for more i
 //---necessary standard libraries-------------------------------------------------------------------
 #include <ostream>    // for std::ostream
 #include <streambuf>  // for std::streambuf
-#include <iostream>   // for std::cerr
-#include <vector>     // for std::vector
 #include <cstddef>    // for size_t
-#include <string>     // for std::string
+#include <vector>     // for std::vector
 #include <memory>     // for std::unique_ptr
 #include <chrono>     // for std::chrono::system_clock::now, std::chrono::system_clock::to_time_t
 #include <iomanip>    // for std::put_time
 #include <ctime>      // for std::localtime, std::time_t
+//#include <iostream>   // for std::cerr
 //---Katagrafeas library----------------------------------------------------------------------------
 namespace Katagrafeas
 {
   namespace Version
   {
-    constexpr long MAJOR  = 000;
-    constexpr long MINOR  = 001;
-    constexpr long PATCH  = 000;
-    constexpr long NUMBER = (MAJOR * 1000 + MINOR) * 1000 + PATCH;
+    const unsigned long MAJOR  = 000;
+    const unsigned long MINOR  = 001;
+    const unsigned long PATCH  = 000;
+    constexpr unsigned long NUMBER = (MAJOR * 1000 + MINOR) * 1000 + PATCH;
   }
 //---Katagrafeas library: frontend forward declarations---------------------------------------------
   inline namespace Frontend
@@ -76,39 +75,14 @@ namespace Katagrafeas
     // return type of std::put_time
     using Formatted = decltype(std::put_time((const std::tm*) nullptr, (const char*) nullptr));
 
-    // return time formated string
+    // return time formatted string
     inline Formatted format_string(const char* format);
-  }
-// --Katagrafeas library: backend struct and class definitions--------------------------------------
-  namespace Backend
-  {
-    class Interceptor final : public std::streambuf {
-      private:
-        inline Interceptor(Stream* stream, std::ostream& ostream, const char* prefix, const char* suffix) noexcept;
-        // restore original buffer
-        inline ~Interceptor() noexcept;
-        // kept track of so it can be restored later
-        std::ostream* const redirected_ostream_;
-        // associated Stream instance
-        Stream* const stream;
-        // buffer of redirected_ostream_ before it was redirected
-        std::streambuf* const original_buffer_;
-        // prefix for new messages
-        const std::string prefix_;
-        // suffix for newlines
-        const std::string suffix_;
-      protected:
-        // intercept character and forward it to streambuf
-        inline virtual int_type overflow(int_type c) override;
-        // intercept sync and forward it to Stream
-        inline virtual int sync() override;
-      friend class Frontend::Stream;
-    };
   }
 // --Katagrafeas library: frontend struct and class definitions-------------------------------------
   inline namespace Frontend
   {
-    class Stream final {
+    class Stream final
+    {
       public:
         inline Stream(std::ostream& ostream, const char* prefix = "", const char* suffix = "") noexcept;
         // restore all ostreams orginal buffer
@@ -116,7 +90,7 @@ namespace Katagrafeas
         // redirect ostream (and backup its original buffer)
         void link(std::ostream& ostream, const char* prefix = "", const char* suffix = "") noexcept;
         // restore ostream's original buffer
-        void restore(std::ostream& ostream) noexcept;
+        bool restore(std::ostream& ostream) noexcept;
         // restore all ostreams orginal buffer
         inline void restore_all(void) noexcept;
         // output to ostream
@@ -126,18 +100,44 @@ namespace Katagrafeas
         inline std::ostream& operator<<(std::ostream& (*manipulator)(std::ostream&)) noexcept;
       private:
         // store intercepted ostreams
-        std::vector<std::unique_ptr<Backend::Interceptor>> backups_;
+        std::vector<std::unique_ptr<Backend::Interceptor>> backups;
         // output streambuf
-        std::streambuf* buffer_;
+        std::streambuf* buffer;
         // underlying ostream linked to the output buffer
-        std::ostream ostream_;
+        std::ostream underlying_ostream;
         // prefix for new messages
-        const char* prefix_;
+        const char* prefix;
         // suffix for newlines
-        const char* suffix_;
+        const char* suffix;
         // prepending flag
-        bool prepend_;
+        bool prepend_flag;
       friend class Backend::Interceptor;
+    };
+  }
+// --Katagrafeas library: backend struct and class definitions--------------------------------------
+  namespace Backend
+  {
+    class Interceptor final : public std::streambuf
+    {
+      public:
+        inline Interceptor(Stream* stream, std::ostream& ostream, const char* prefix, const char* suffix) noexcept;
+        // restore original buffer
+        inline ~Interceptor() noexcept;
+        // kept track of so it can be restored later
+        std::ostream* const redirected_ostream;
+      private:
+        // associated Stream instance
+        Stream* const stream;
+        // buffer of redirected_ostream before it was redirected
+        std::streambuf* const original_buffer;
+        // prefix for new messagess
+        const char* prefix;
+        // suffix for newlines
+        const char* suffix;
+        // intercept character and forward it to streambuf
+        inline virtual int_type overflow(int_type character) override;
+        // intercept sync and forward it to Stream
+        inline virtual int sync() override;
     };
   }
 // --Katagrafeas library: frontend struct and class member definitions------------------------------
@@ -145,11 +145,11 @@ namespace Katagrafeas
   {
     Stream::Stream(std::ostream& ostream, const char* prefix, const char* suffix) noexcept
       : // member initialization list
-      buffer_(ostream.rdbuf()),
-      ostream_(buffer_),
-      prefix_(prefix),
-      suffix_(suffix),
-      prepend_(true)
+      buffer(ostream.rdbuf()),
+      underlying_ostream(buffer),
+      prefix(prefix),
+      suffix(suffix),
+      prepend_flag(true)
     {}
 
     Stream::~Stream() noexcept
@@ -159,55 +159,59 @@ namespace Katagrafeas
 
     void Stream::link(std::ostream& ostream, const char* prefix, const char* suffix) noexcept
     {
-      // create interceptor
-      Backend::Interceptor* interceptor = new Backend::Interceptor(this, ostream, prefix, suffix);
+      // construct and store interceptor unique pointer
+      backups.emplace_back(new Backend::Interceptor(this, ostream, prefix, suffix));
 
-      // store and take interceptor ownership via std::unique_ptr
-      backups_.emplace_back(interceptor);
-
-      // redirect towards the interceptor
-      ostream.rdbuf(interceptor);
+      // redirect towards the new interceptor
+      ostream.rdbuf(backups.back().get());
     }
 
-    void Stream::restore(std::ostream& ostream) noexcept
+    bool Stream::restore(std::ostream& ostream) noexcept
     {
-      // amount of backups
-      const size_t n = backups_.size();
-
-      // look for ostream in backups and delete it
-      for(size_t i = n - 1; i < n; --i)
+      // look for ostream in backups
+      for (size_t k = backups.size(); k; --k)
       {
-        if (backups_[i]->redirected_ostream_ == &ostream)
+        if (backups[k]->redirected_ostream == &ostream)
         {
           // delete from backup list (destructor restores buffer)
-          backups_.erase(backups_.begin() + i);
+          backups.erase(backups.begin() + k);
 
           // stream was restored, no more work is necessary
-          return;
+          return true;
         }
       }
 
-      // if we end up here it's because the ostream is not part of the backup list
-      std::cerr << "error: Stream: couldn't restore ostream; ostream not found in backups\n";
+      // ostream is not part of the backup list
+      return false;
     }
 
     void Stream::restore_all(void) noexcept
     {
       // restore all ostreams (destructor restores buffer)
-      backups_.clear();
+      backups.clear();
     }
 
     template<typename T>
     std::ostream& Stream::operator<<(const T& text) noexcept
     {
+      if (prepend_flag)
+      {
+        prepend_flag = false;
+        underlying_ostream << Backend::format_string(prefix);
+      }
+      // else if (text == '\n')
+      // {
+      //   underlying_ostream << Backend::format_string(suffix);
+      // }
+
       // output to stream
-      return ostream_ << Backend::format_string(prefix_) << text;
+      underlying_ostream << text;
     }
 
     std::ostream& Stream::operator<<(std::ostream& (*manipulator)(std::ostream&)) noexcept
     {
       // apply manipulator
-      return manipulator(ostream_);
+      return manipulator(underlying_ostream);
     }
   }
 // --Katagrafeas library: backend struct and class member definitions-------------------------------
@@ -215,37 +219,37 @@ namespace Katagrafeas
   {
     Interceptor::Interceptor(Stream* stream, std::ostream& ostream, const char* prefix, const char* suffix) noexcept
       : // member initialization list
+      redirected_ostream(&ostream),
       stream(stream),
-      redirected_ostream_(&ostream),
-      original_buffer_(ostream.rdbuf()),
-      prefix_(prefix),
-      suffix_(suffix)
+      original_buffer(ostream.rdbuf()),
+      prefix(prefix),
+      suffix(suffix)
     {}
 
     Interceptor::~Interceptor() noexcept
     {
-      redirected_ostream_->rdbuf(original_buffer_);
+      redirected_ostream->rdbuf(original_buffer);
     }
 
-    Interceptor::int_type Interceptor::overflow(int_type c)
+    Interceptor::int_type Interceptor::overflow(int_type character)
     {
-      if (stream->prepend_)
+      if (stream->prepend_flag)
       {
-        stream->prepend_ = false;
-        stream->ostream_ << Backend::format_string(stream->prefix_) << prefix_;
+        stream->prepend_flag = false;
+        stream->underlying_ostream << Backend::format_string(stream->prefix) << prefix;
       }
-      else if (c == '\n')
+      else if (character == '\n')
       {
-        stream->ostream_ << suffix_ << Backend::format_string(stream->suffix_);
+        stream->underlying_ostream << suffix << Backend::format_string(stream->suffix);
       }
 
-      return stream->buffer_->sputc(c);
+      return stream->buffer->sputc(character);
     }
 
     int Interceptor::sync()
     {
-      stream->prepend_ = true;
-      return stream->buffer_->pubsync();
+      stream->prepend_flag = true;
+      return stream->buffer->pubsync();
     }
 
     Formatted format_string(const char* format)

@@ -2,15 +2,26 @@
 #include <chrono>
 #include <ctime>
 #include "include/Katagrafeas.hpp"
-#include "testing/Chronometros.hpp"
+#include "testing/Chronometro.hpp"
 #include <iomanip>
 
-int main() {
-    Chronometro::Stopwatch<> sw;
-    
-    sw.reset();
-    std::time_t time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-    std::stringstream time_stream;
-    std::cout << std::put_time(std::localtime(&time), "other datatime: %y-%m-%d %H:%M:%S") << std::endl;
-    sw.split();
+// scuffed sleep function to demonstrate the basic usage of the library
+void sleep_for_ms(std::chrono::high_resolution_clock::rep ms)
+{
+  auto start = std::chrono::high_resolution_clock::now();
+  while(std::chrono::nanoseconds(std::chrono::high_resolution_clock::now()-start).count() < ms*1000000);
+}
+
+Katagrafeas::Stream logger(std::cout, "[Logger %H:%M:%S] ");
+Chronometro::Stopwatch<> stopwatch;
+
+int main()
+{
+    logger.link(Chronometro::Global::out, "[Chronometro] ");
+
+    stopwatch.reset();
+      sleep_for_ms(1000);
+    stopwatch.lap();
+      sleep_for_ms(2000);
+    stopwatch.split();
 }
