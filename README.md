@@ -9,16 +9,14 @@ Katagrafeas is a simple and lightweight C++11 (and newer) library that allows yo
 
 ## Usage
 
-Katagrafeas offers two ways to measure elapsed time:
-* [execution_time](#execution_time) function
-* [CHRONOMETRO_EXECUTION_TIME](#CHRONOMETRO_EXECUTION_TIME) macro
+Katagrafeas offers
 
 ---
 
-### OStream
+### Stream
 
 ```
-OStream(buffer)
+Stream(buffer)
 ```
 description
 
@@ -56,13 +54,7 @@ int main()
 
 ## Version
 
-The current version defines the following macros:
-```cpp
-#define KATAGRAFEAS_VERSION       001000000L
-#define KATAGRAFEAS_VERSION_MAJOR 1
-#define KATAGRAFEAS_VERSION_MINOR 0
-#define KATAGRAFEAS_VERSION_PATCH 0
-```
+The current library version is given via `Katagrafeas::Version::NUMBER`.
 
 ---
 
@@ -76,7 +68,7 @@ The current version defines the following macros:
 
 ## History
 
-Version 1.0.0 - initial release
+Version 0.1.0 - xxx
 
 ---
 

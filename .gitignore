@@ -32,6 +32,6 @@
 *.app
 
 # Folders
-.vscode
-output
-testing
+**/.vscode/**
+**/build/**
+**/ignore/**
