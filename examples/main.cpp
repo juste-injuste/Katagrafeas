@@ -17,7 +17,7 @@ int main()
 {
   logger.link(SomeLibrary::out, "[SomeLibrary] ");
   logger.link(std::cout, "[std::cout] ");
-  logger.link(std::clog, "[std::clog at %H:%M:%S] ");
+  logger.link(std::clog, "[std::clog] ", " [at %H:%M:%S]");
 
   SomeLibrary::print("captured output");
 
@@ -33,15 +33,26 @@ int main()
   sleep(2000);
   SomeLibrary::print("other captured output");
 
-  KATAGRAFEAS_ILOG("test %d", 1);
-  {
-    KATAGRAFEAS_ILOG("test %d", 2);
-    {
-      KATAGRAFEAS_ILOG("test %d", 3);
-      KATAGRAFEAS_ILOG("test %d", 4);
-      {
-        KATAGRAFEAS_ILOG("test %d", 5);
-      }
-    }
-  }
+  // KATAGRAFEAS_ILOG("test %d", 1);
+  // {
+  //   KATAGRAFEAS_ILOG("test %d", 2);
+  //   {
+  //     KATAGRAFEAS_ILOG("test %d", 3);
+  //     {
+  //       KATAGRAFEAS_ILOG("test %d", 5);
+  //     }
+  //     KATAGRAFEAS_ILOG("test %d", 4);
+  //   }
+  //   KATAGRAFEAS_ILOG("test %d", 4);
+  // }
+  // KATAGRAFEAS_ILOG("test %d", 4);
+
+
+  KATAGRAFEAS_ILOG("some message");
+  KATAGRAFEAS_ILOG("some formatted %s", "message");
+
+  KATAGRAFEAS_LOG("some message");
+  KATAGRAFEAS_LOG("some formatted %s", "message");
+
+  logger.restore(SomeLibrary::out);
 }
