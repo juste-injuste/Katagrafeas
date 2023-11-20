@@ -113,7 +113,7 @@ namespace Katagrafeas
     class IndentedLog final
     {
     public:
-      inline IndentedLog(const std::string& text, const std::string& caller = "") noexcept;
+      inline IndentedLog(const char* text, const char* caller = "") noexcept;
       inline ~IndentedLog() noexcept;
     private:
       static unsigned indentation;
@@ -149,7 +149,7 @@ namespace Katagrafeas
   private:
     // store intercepted ostreams
     std::vector<std::unique_ptr<Backend::Interceptor>> backups;
-    // output streambuf
+    // output buffer
     std::streambuf* buffer;
     // underlying ostream linked to the output buffer
     std::ostream underlying_ostream{buffer};
@@ -166,11 +166,12 @@ namespace Katagrafeas
 
 # undef  KATAGRAFEAS_LOG
 # define KATAGRAFEAS_LOG_IMPL1(line, message) Katagrafeas::Global::log << "log: " << __func__ << ": " << message << std::endl
-# define KATAGRAFEAS_LOG_IMPL2(line, message, ...)                                  \
-    [&](const char* caller){                                                        \
-      char buffer[KATAGRAFEAS_MAX_LEN];                                             \
-      sprintf(buffer, message, __VA_ARGS__);                                        \
-      Katagrafeas::Global::log << "log: " << caller << ": " << buffer << std::endl; \
+# define KATAGRAFEAS_LOG_IMPL2(line, message, ...)                \
+    [&](const char* caller){                                      \
+      static char formatted_message[KATAGRAFEAS_MAX_LEN];         \
+      sprintf(formatted_message, message, __VA_ARGS__);           \
+      Katagrafeas::Global::log << "log: " << caller << ": ";      \
+      Katagrafeas::Global::log << formatted_message << std::endl; \
     }(__func__)
 # define KATAGRAFEAS_LOG_IMPL(_1, _2, _3, NARGS, ...) KATAGRAFEAS_LOG_IMPL##NARGS
 # define KATAGRAFEAS_LOG_LINE(...)                    KATAGRAFEAS_LOG_IMPL(__VA_ARGS__, 2, 1, 0)(__VA_ARGS__)
@@ -181,9 +182,9 @@ namespace Katagrafeas
 # define KATAGRAFEAS_ILOG_IMPL2(line, message, ...) \
     Katagrafeas::Backend::IndentedLog ilog_##line { \
       [&]{                                          \
-        char buffer[KATAGRAFEAS_MAX_LEN];           \
+        static char buffer[KATAGRAFEAS_MAX_LEN];    \
         sprintf(buffer, message, __VA_ARGS__);      \
-        return std::string(buffer);                 \
+        return buffer;                              \
       }(), __func__}
 # define KATAGRAFEAS_ILOG_IMPL(_1, _2, _3, NARGS, ...) KATAGRAFEAS_ILOG_IMPL##NARGS
 # define KATAGRAFEAS_ILOG_LINE(...)                    KATAGRAFEAS_ILOG_IMPL(__VA_ARGS__, 2, 1, 0)(__VA_ARGS__)
@@ -256,16 +257,16 @@ namespace Katagrafeas
 
     Interceptor::int_type Interceptor::overflow(int_type character)
     {
-      if (stream->prepend_flag)
+      if (character == '\n')
+      {
+        stream->underlying_ostream << Backend::format_string(suffix);
+        stream->underlying_ostream << Backend::format_string(stream->suffix);
+      }
+      else if (stream->prepend_flag)
       {
         stream->prepend_flag = false;
         stream->underlying_ostream << Backend::format_string(stream->prefix);
         stream->underlying_ostream << Backend::format_string(prefix);
-      }
-      else if (character == '\n')
-      {
-        stream->underlying_ostream << Backend::format_string(suffix);
-        stream->underlying_ostream << Backend::format_string(stream->suffix);
       }
 
       return stream->buffer->sputc(character);
@@ -274,12 +275,12 @@ namespace Katagrafeas
     int Interceptor::sync()
     {
       stream->prepend_flag = true;
-      return stream->buffer->pubsync();
+      return 0;
     }
     
     unsigned IndentedLog::indentation = 0;
 
-    IndentedLog::IndentedLog(const std::string& text, const std::string& caller) noexcept
+    IndentedLog::IndentedLog(const char* text, const char* caller) noexcept
     {
       Global::log << "log: " << caller << ": ";
 

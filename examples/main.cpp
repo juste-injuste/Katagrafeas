@@ -17,7 +17,7 @@ int main()
 {
   logger.link(SomeLibrary::out, "[SomeLibrary] ");
   logger.link(std::cout, "[std::cout] ");
-  logger.link(std::clog, "[std::clog] ", " [at %H:%M:%S]");
+  logger.link(std::cerr, "[std::cerr] ", " [at %H:%M:%S]");
 
   SomeLibrary::print("captured output");
 
@@ -28,9 +28,9 @@ int main()
   std::cout << "output on cout" << std::endl;
 
   sleep(1000);
-  std::clog << "ERROR!!!!" << std::endl;
+  std::cerr << "ERROR!!!!" << std::endl;
 
-  sleep(2000);
+  sleep(1000);
   SomeLibrary::print("other captured output");
 
   // KATAGRAFEAS_ILOG("test %d", 1);
@@ -47,12 +47,9 @@ int main()
   // }
   // KATAGRAFEAS_ILOG("test %d", 4);
 
+  // KATAGRAFEAS_ILOG("some message");
+  // KATAGRAFEAS_ILOG("some formatted %s", "message");
 
-  KATAGRAFEAS_ILOG("some message");
-  KATAGRAFEAS_ILOG("some formatted %s", "message");
-
-  KATAGRAFEAS_LOG("some message");
-  KATAGRAFEAS_LOG("some formatted %s", "message");
-
-  logger.restore(SomeLibrary::out);
+  // KATAGRAFEAS_LOG("some message");
+  // KATAGRAFEAS_LOG("some formatted %s", "message");
 }
