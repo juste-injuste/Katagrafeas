@@ -33,23 +33,23 @@ int main()
   sleep(1000);
   SomeLibrary::print("other captured output");
 
-  // KATAGRAFEAS_ILOG("test %d", 1);
-  // {
-  //   KATAGRAFEAS_ILOG("test %d", 2);
-  //   {
-  //     KATAGRAFEAS_ILOG("test %d", 3);
-  //     {
-  //       KATAGRAFEAS_ILOG("test %d", 5);
-  //     }
-  //     KATAGRAFEAS_ILOG("test %d", 4);
-  //   }
-  //   KATAGRAFEAS_ILOG("test %d", 4);
-  // }
-  // KATAGRAFEAS_ILOG("test %d", 4);
+  KATAGRAFEAS_ILOG("test %d", 1);
+  {
+    KATAGRAFEAS_ILOG("test %d", 2);
+    {
+      KATAGRAFEAS_ILOG("test %d", 3);
+      {
+        KATAGRAFEAS_ILOG("test %d", 5);
+      }
+      KATAGRAFEAS_ILOG("test %d", 4);
+    }
+    KATAGRAFEAS_ILOG("test %d", 4);
+  }
+  KATAGRAFEAS_ILOG("test %d", 4);
 
-  // KATAGRAFEAS_ILOG("some message");
-  // KATAGRAFEAS_ILOG("some formatted %s", "message");
+  KATAGRAFEAS_ILOG("some message");
+  KATAGRAFEAS_ILOG("some formatted %s %s", "message", "3");
 
-  // KATAGRAFEAS_LOG("some message");
-  // KATAGRAFEAS_LOG("some formatted %s", "message");
+  KATAGRAFEAS_LOG("some message");
+  KATAGRAFEAS_LOG("some formatted %s, %d", "message", 3);
 }

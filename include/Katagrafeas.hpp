@@ -51,24 +51,12 @@ streams towards a common destination. See the included README.MD file for more i
 #include <ctime>     // for std::localtime, std::time_t
 #include <iostream>  // for std::clog, std::cerr
 #include <cstdio>    // for std::sprintf
+#ifdef __STDCPP_THREADS__
+# include <mutex>
+#endif
 //---Katagrafeas library------------------------------------------------------------------------------------------------
 namespace Katagrafeas
 {
-  // ostream redirection aswell as prefixing and suffixing
-  class Stream;
-  
-  // log a message
-# define KATAGRAFEAS_LOG(message)
-
-  // log a message using stack-based indentation
-# define KATAGRAFEAS_ILOG(message)
-
-  // issue a warning
-# define KATAGRAFEAS_WARNING(message)
-
-  // issue an error along with a code
-# define KATAGRAFEAS_ERROR(message, code)
-
   namespace Version
   {
     constexpr unsigned long MAJOR  = 000;
@@ -77,64 +65,102 @@ namespace Katagrafeas
     constexpr unsigned long NUMBER = (MAJOR * 1000 + MINOR) * 1000 + PATCH;
   }
 
+  // ostream redirection aswell as prefixing and suffixing
+  class Stream;
+
+# define KATAGRAFEAS_LOG(message, ...)    // log a formattable message
+# define KATAGRAFEAS_ILOG(message, ...)   // log a formattable message using stack-based indentation
+# define KATAGRAFEAS_WARNING(message)     // issue a warning
+# define KATAGRAFEAS_ERROR(message, code) // issue an error along with a code
+
   namespace Global
   {
     std::ostream log{std::clog.rdbuf()};
     std::ostream wrn{std::clog.rdbuf()};
     std::ostream err{std::cerr.rdbuf()};
   }
+
+# ifndef KATAGRAFEAS_MAX_LEN
+#   define KATAGRAFEAS_MAX_LEN 256
+# endif
 //---Katagrafeas library: backend forward declarations------------------------------------------------------------------
   namespace Backend
   {
     // intercept individual ostreams to use a unique prefix and suffix
     class Interceptor final : public std::streambuf
     {
-      public:
-        inline Interceptor(Stream* stream, std::ostream& ostream, const char* prefix, const char* suffix) noexcept;
-        // restore original buffer
-        inline ~Interceptor() noexcept;
-        // kept track of so it can be restored later
-        std::ostream* const ostream;
-      private:
-        // associated Stream instance
-        Stream* const stream;
-        // ostream's buffer before it's redirected by *stream
-        std::streambuf* const buffer_backup = ostream->rdbuf();
-        // prefix for new messagess
-        const char* prefix;
-        // suffix for newlines
-        const char* suffix;
-        // intercept character and forward it to streambuf
-        inline virtual int_type overflow(int_type character) override;
-        // intercept sync and forward it to Stream
-        inline virtual int sync() override;
-    };
-
-    class IndentedLog final
-    {
     public:
-      inline IndentedLog(const char* text, const char* caller = "") noexcept;
-      inline ~IndentedLog() noexcept;
+      Interceptor(Stream* stream, std::ostream& ostream, const char* prefix, const char* suffix) noexcept :
+        ostream{&ostream},
+        stream{stream},
+        prefix{prefix},
+        suffix{suffix}
+      {}
+      
+      ~Interceptor() noexcept
+      {
+        ostream->rdbuf(buffer_backup); // restore original buffer
+      }
+
+      std::ostream*   const ostream; // kept track of to restore it later
     private:
-      static unsigned indentation;
-      static unsigned constexpr indentation_size = 2;
+      std::streambuf* const buffer_backup = ostream->rdbuf();
+      Stream* const         stream;  // associated Stream instance
+      const char* const     prefix;  // prefix for new messages
+      const char* const     suffix;  // suffix for newlines
+
+      // streambuf functionalities
+      inline int_type overflow(int_type character) override;
+      inline int sync() override;
     };
 
     // return type of std::put_time
     using Formatted = decltype(std::put_time((const std::tm*) nullptr, (const char*) nullptr));
 
     // return time formatted string
-    inline Formatted format_string(const char* format);
+    inline Formatted format_string(const char* format)
+    {
+      const std::time_t time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+      return std::put_time(std::localtime(&time), format);
+    }
 
-# if not defined(KATAGRAFEAS_MAX_LEN)
-#   define KATAGRAFEAS_MAX_LEN 256
-# endif
+    class IndentedLog final
+    {
+    public:
+      IndentedLog(const char* text, const char* caller = "") noexcept
+      {
+        Global::log << "log: " << caller << ": ";
+
+        for (unsigned k = indentation(); k; --k)
+        {
+          Global::log << ' ';
+        }
+
+        Global::log << text << std::endl;
+
+        indentation() += indentation_size;
+      }
+
+      ~IndentedLog() noexcept
+      {
+        indentation() -= indentation_size;
+      }
+    private:
+      static inline unsigned& indentation() noexcept
+      {
+        static unsigned indentation = 0;
+        return indentation;
+      }
+      static constexpr unsigned indentation_size = 2;
+    };
+    
+    inline void log(const char* caller, const char* message);
   }
 // --Katagrafeas library: frontend struct and class definitions---------------------------------------------------------
   class Stream final
   {
   public:
-    inline explicit Stream(std::ostream& ostream, const char* prefix = "", const char* suffix = "") noexcept;
+    inline Stream(std::ostream& ostream, const char* prefix = "", const char* suffix = "") noexcept;
     // restore all ostreams orginal buffer
     inline ~Stream() noexcept;
     // redirect ostream (and backup its original buffer)
@@ -145,7 +171,8 @@ namespace Katagrafeas
     inline void restore_all() noexcept;
     // interact with general ostream
     template<typename T>
-    inline std::ostream& operator<<(const T& anything) noexcept;
+    inline Stream& operator <<(const T& anything) noexcept;
+    inline Stream& operator <<(std::ostream& (*manipulator)(std::ostream&)) noexcept;
   private:
     // store intercepted ostreams
     std::vector<std::unique_ptr<Backend::Interceptor>> backups;
@@ -156,39 +183,32 @@ namespace Katagrafeas
     // ostream for general io
     std::ostream general_ostream{nullptr};
     // prefix for new messages
-    const char* prefix;
+    const char* const prefix;
     // suffix for newlines
-    const char* suffix;
+    const char* const suffix;
     // prepending flag
     bool prepend_flag = true;
   friend class Backend::Interceptor;
   };
 
 # undef  KATAGRAFEAS_LOG
-# define KATAGRAFEAS_LOG_IMPL1(line, message) Katagrafeas::Global::log << "log: " << __func__ << ": " << message << std::endl
-# define KATAGRAFEAS_LOG_IMPL2(line, message, ...)                \
-    [&](const char* caller){                                      \
-      static char formatted_message[KATAGRAFEAS_MAX_LEN];         \
-      sprintf(formatted_message, message, __VA_ARGS__);           \
-      Katagrafeas::Global::log << "log: " << caller << ": ";      \
-      Katagrafeas::Global::log << formatted_message << std::endl; \
+# define KATAGRAFEAS_LOG(...)                    \
+    [&](const char* caller){                     \
+      static char buffer[KATAGRAFEAS_MAX_LEN];   \
+      sprintf(buffer, __VA_ARGS__);              \
+      Katagrafeas::Backend::log(caller, buffer); \
     }(__func__)
-# define KATAGRAFEAS_LOG_IMPL(_1, _2, _3, NARGS, ...) KATAGRAFEAS_LOG_IMPL##NARGS
-# define KATAGRAFEAS_LOG_LINE(...)                    KATAGRAFEAS_LOG_IMPL(__VA_ARGS__, 2, 1, 0)(__VA_ARGS__)
-# define KATAGRAFEAS_LOG(...)                         KATAGRAFEAS_LOG_LINE(__LINE__, __VA_ARGS__)
 
 # undef  KATAGRAFEAS_ILOG
-# define KATAGRAFEAS_ILOG_IMPL1(line, message) Katagrafeas::Backend::IndentedLog ilog_##line { message, __func__}
-# define KATAGRAFEAS_ILOG_IMPL2(line, message, ...) \
+# define KATAGRAFEAS_ILOG_IMPL(line, ...)           \
     Katagrafeas::Backend::IndentedLog ilog_##line { \
       [&]{                                          \
         static char buffer[KATAGRAFEAS_MAX_LEN];    \
-        sprintf(buffer, message, __VA_ARGS__);      \
+        sprintf(buffer, __VA_ARGS__);               \
         return buffer;                              \
       }(), __func__}
-# define KATAGRAFEAS_ILOG_IMPL(_1, _2, _3, NARGS, ...) KATAGRAFEAS_ILOG_IMPL##NARGS
-# define KATAGRAFEAS_ILOG_LINE(...)                    KATAGRAFEAS_ILOG_IMPL(__VA_ARGS__, 2, 1, 0)(__VA_ARGS__)
-# define KATAGRAFEAS_ILOG(...)                         KATAGRAFEAS_ILOG_LINE(__LINE__, __VA_ARGS__)
+# define KATAGRAFEAS_ILOG_PROX(line, ...) KATAGRAFEAS_ILOG_IMPL(line,     __VA_ARGS__)
+# define KATAGRAFEAS_ILOG(...)            KATAGRAFEAS_ILOG_PROX(__LINE__, __VA_ARGS__)
 
 # undef  KATAGRAFEAS_WARNING
 # define KATAGRAFEAS_WARNING(message) Global::wrn << "warning: " << __func__ << ": " << message << std::endl
@@ -236,25 +256,30 @@ namespace Katagrafeas
   }
 
   template<typename T>
-  std::ostream& Stream::operator<<(const T& anything) noexcept
+  Stream& Stream::operator <<(const T& anything) noexcept
   {
-    return general_ostream << anything;
+    general_ostream << anything;
+    return *this;
+  }
+
+  Stream& Stream::operator <<(std::ostream& (*manipulator)(std::ostream&)) noexcept
+  {
+    manipulator(general_ostream);
+    return *this;
   }
 // --Katagrafeas library: backend struct and class member definitions---------------------------------------------------
   namespace Backend
   {
-    Interceptor::Interceptor(Stream* stream, std::ostream& ostream, const char* prefix, const char* suffix) noexcept :
-      ostream{&ostream},
-      stream{stream},
-      prefix{prefix},
-      suffix{suffix}
-    {}
-
-    Interceptor::~Interceptor() noexcept
+    void log(const char* caller, const char* message)
     {
-      ostream->rdbuf(buffer_backup);
+#   ifdef __STDCPP_THREADS__
+      static std::mutex mtx;
+      std::lock_guard<std::mutex> lock{mtx};
+#   endif
+      Global::log << "log: " << caller;
+      Global::log << ": " << message << std::endl;
     }
-
+    
     Interceptor::int_type Interceptor::overflow(int_type character)
     {
       if (character == '\n')
@@ -264,45 +289,18 @@ namespace Katagrafeas
       }
       else if (stream->prepend_flag)
       {
-        stream->prepend_flag = false;
         stream->underlying_ostream << Backend::format_string(stream->prefix);
         stream->underlying_ostream << Backend::format_string(prefix);
+        stream->prepend_flag = false;
       }
 
       return stream->buffer->sputc(character);
     }
-
+    
     int Interceptor::sync()
     {
       stream->prepend_flag = true;
       return 0;
-    }
-    
-    unsigned IndentedLog::indentation = 0;
-
-    IndentedLog::IndentedLog(const char* text, const char* caller) noexcept
-    {
-      Global::log << "log: " << caller << ": ";
-
-      for (unsigned k = indentation; k; --k)
-      {
-        Global::log << ' ';
-      }
-
-      Global::log << text << std::endl;
-
-      indentation += indentation_size;
-    }
-
-    IndentedLog::~IndentedLog() noexcept
-    {
-      indentation -= indentation_size;
-    }
-
-    Formatted format_string(const char* format)
-    {
-      const std::time_t time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-      return std::put_time(std::localtime(&time), format);
     } 
   }
 }
