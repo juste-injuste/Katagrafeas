@@ -1,4 +1,4 @@
-#include "Katagrafeas.hpp"
+#include "../include/Katagrafeas.hpp"
 #include "SomeLibrary.hpp"
 #include <chrono>
 
