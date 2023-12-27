@@ -52,7 +52,8 @@ streams towards a common destination. See the included README.MD file for more i
 #include <iostream>  // for std::clog, std::cerr
 #if defined(__STDCPP_THREADS__) and not defined(KATAGRAFEAS_NOT_THREADSAFE)
 # define KATAGRAFEAS_THREADSAFE
-# include <mutex>
+# include <atomic>   // for std::atomic
+# include <mutex>    // for std::mutex, std::lock_guard
 #endif
 #include <cstdio>    // for std::sprintf
 //---Katagrafeas library------------------------------------------------------------------------------------------------
@@ -98,24 +99,22 @@ namespace Katagrafeas
 #   define KATAGRAFEAS_HOT
 # endif
 
-# if defined (KATAGRAFEAS_THREADSAFE)
-    thread_local char _log_buffer[KATAGRAFEAS_MAX_LEN];
-    thread_local char _ilog_buffer[KATAGRAFEAS_MAX_LEN];
-    thread_local char _wrn_buffer[KATAGRAFEAS_MAX_LEN];
-    std::mutex _log_mtx;
-    std::mutex _ilog_mtx;
-    std::mutex _wrn_mtx;
-#   define KATAGRAFEAS_LOG_LOCK  std::lock_guard<std::mutex> _log_lock{_backend::_log_mtx}
-#   define KATAGRAFEAS_ILOG_LOCK std::lock_guard<std::mutex> _ilog_lock{_backend::_ilog_mtx}
-#   define KATAGRAFEAS_WRN_LOCK  std::lock_guard<std::mutex> _wrn_lock{_backend::_wrn_mtx}
+# if defined(KATAGRAFEAS_THREADSAFE)
+#   define KATAGRAFEAS_THREADLOCAL     thread_local
+#   define KATAGRAFEAS_ATOMIC(TYPE)    std::atomic<TYPE>
+#   define KATAGRAFEAS_MAKE_MUTEX(...) static std::mutex __VA_ARGS__
+#   define KATAGRAFEAS_LOCK(MUTEX)     std::lock_guard<decltype(MUTEX)> _lock{MUTEX}
 # else
-    char _log_buffer[KATAGRAFEAS_MAX_LEN];
-    char _ilog_buffer[KATAGRAFEAS_MAX_LEN];
-    char _wrn_buffer[KATAGRAFEAS_MAX_LEN];
-#   define KATAGRAFEAS_LOG_LOCK
-#   define KATAGRAFEAS_ILOG_LOCK
-#   define KATAGRAFEAS_WRN_LOCK
+#   define KATAGRAFEAS_THREADLOCAL
+#   define KATAGRAFEAS_ATOMIC(TYPE)    TYPE
+#   define KATAGRAFEAS_MAKE_MUTEX(...)
+#   define KATAGRAFEAS_LOCK(MUTEX)     void(0)
 # endif
+
+    KATAGRAFEAS_THREADLOCAL char _log_buffer[KATAGRAFEAS_MAX_LEN];
+    KATAGRAFEAS_THREADLOCAL char _ilog_buffer[KATAGRAFEAS_MAX_LEN];
+    KATAGRAFEAS_THREADLOCAL char _wrn_buffer[KATAGRAFEAS_MAX_LEN];
+    KATAGRAFEAS_MAKE_MUTEX(_log_mtx, _ilog_mtx, _wrn_mtx);
 
     // intercept individual ostreams to use a unique prefix and suffix
     class _interceptor final : public std::streambuf
@@ -176,20 +175,10 @@ namespace Katagrafeas
         indentation -= 2;
       }
     private:
-      static unsigned indentation;
+      static KATAGRAFEAS_ATOMIC(unsigned) indentation;
     };
 
-    unsigned _indentedlog::indentation = 0;
-    
-    void _log(const char* caller, const char* message)
-    {
-#   ifdef __STDCPP_THREADS__
-      static std::mutex mtx;
-      std::lock_guard<std::mutex> lock{mtx};
-#   endif
-      Global::log << "log: " << caller;
-      Global::log << ": " << message << std::endl;
-    }
+    KATAGRAFEAS_ATOMIC(unsigned) _indentedlog::indentation = {0};
   }
 // --Katagrafeas library: frontend struct and class definitions---------------------------------------------------------
   class Stream final
@@ -228,7 +217,7 @@ namespace Katagrafeas
 # define KATAGRAFEAS_LOG(...)                                              \
     [&](const char* caller){                                               \
       sprintf(_backend::_log_buffer, __VA_ARGS__);                         \
-      KATAGRAFEAS_LOG_LOCK;                                                \
+      KATAGRAFEAS_LOCK(_backend::_log_mtx);                                \
       Global::log << caller << ": " << _backend::_log_buffer << std::endl; \
     }(__func__)
 
@@ -246,7 +235,7 @@ namespace Katagrafeas
 # define KATAGRAFEAS_WARNING(...)                                                         \
     [&](const char* caller){                                                              \
       sprintf(_backend::_wrn_buffer, __VA_ARGS__);                                        \
-      KATAGRAFEAS_WRN_LOCK;                                                               \
+      KATAGRAFEAS_LOCK(_backend::_wrn_mtx);                                               \
       Global::wrn << "warning: " << caller << ": " << _backend::_wrn_buffer << std::endl; \
     }(__func__)
 
@@ -333,6 +322,13 @@ namespace Katagrafeas
       return 0;
     }
   }
-
 }
+# undef KATAGRAFEAS_HOT
+# undef KATAGRAFEAS_COLD
+# undef KATAGRAFEAS_THREADSAFE
+# undef KATAGRAFEAS_THREADLOCAL
+# undef KATAGRAFEAS_MAKE_MUTEX
+# undef KATAGRAFEAS_LOCK
+# undef KATAGRAFEAS_NODISCARD
+# undef KATAGRAFEAS_NODISCARD_REASON
 #endif
