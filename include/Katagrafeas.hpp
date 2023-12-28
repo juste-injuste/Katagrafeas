@@ -59,14 +59,6 @@ streams towards a common destination. See the included README.MD file for more i
 //---Katagrafeas library------------------------------------------------------------------------------------------------
 namespace Katagrafeas
 {
-  namespace Version
-  {
-    constexpr unsigned long MAJOR  = 000;
-    constexpr unsigned long MINOR  = 001;
-    constexpr unsigned long PATCH  = 000;
-    constexpr unsigned long NUMBER = (MAJOR * 1000 + MINOR) * 1000 + PATCH;
-  }
-
   // ostream redirection aswell as prefixing and suffixing
   class Stream;
 
@@ -81,22 +73,56 @@ namespace Katagrafeas
 
   namespace Global
   {
-    std::ostream log{std::clog.rdbuf()};
-    std::ostream wrn{std::clog.rdbuf()};
-    std::ostream err{std::cerr.rdbuf()};
+    static std::ostream log{std::clog.rdbuf()};
+    static std::ostream wrn{std::clog.rdbuf()};
+    static std::ostream err{std::cerr.rdbuf()};
+  }
+
+  namespace Version
+  {
+    constexpr unsigned long MAJOR  = 000;
+    constexpr unsigned long MINOR  = 001;
+    constexpr unsigned long PATCH  = 000;
+    constexpr unsigned long NUMBER = (MAJOR * 1000 + MINOR) * 1000 + PATCH;
   }
 //---Katagrafeas library: backend forward declarations------------------------------------------------------------------
   namespace _backend
   {
-# if defined(__GNUC__) and (__GNUC__ >= 9)
-#   define KATAGRAFEAS_COLD [[unlikely]]
-#   define KATAGRAFEAS_HOT  [[likely]]
-# elif defined(__clang__) and (__clang_major__ >= 12)
-#   define KATAGRAFEAS_COLD [[unlikely]]
-#   define KATAGRAFEAS_HOT  [[likely]]
+#   define KATAGRAFEAS_PRAGMA(PRAGMA) _Pragma(#PRAGMA)
+#   define KATAGRAFEAS_CLANG_IGNORE(WARNING, ...)          \
+      KATAGRAFEAS_PRAGMA(clang diagnostic push)            \
+      KATAGRAFEAS_PRAGMA(clang diagnostic ignored WARNING) \
+      __VA_ARGS__                                      \
+      KATAGRAFEAS_PRAGMA(clang diagnostic pop)
+
+// support from clang 12.0.0 and GCC 10.1 onward
+# if defined(__clang__) and (__clang_major__ >= 12)
+# if __cplusplus < 202002L
+#   define KATAGRAFEAS_HOT  KATAGRAFEAS_CLANG_IGNORE("-Wc++20-extensions", [[likely]])
+#   define KATAGRAFEAS_COLD KATAGRAFEAS_CLANG_IGNORE("-Wc++20-extensions", [[unlikely]])
 # else
-#   define KATAGRAFEAS_COLD
+#   define KATAGRAFEAS_HOT  [[likely]]
+#   define KATAGRAFEAS_COLD [[unlikely]]
+# endif
+# elif defined(__GNUC__) and (__GNUC__ >= 10)
+#   define KATAGRAFEAS_HOT  [[likely]]
+#   define KATAGRAFEAS_COLD [[unlikely]]
+# else
 #   define KATAGRAFEAS_HOT
+#   define KATAGRAFEAS_COLD
+# endif
+
+// support from clang 3.9.0 and GCC 7.1 onward
+# if defined(__clang__) and ((__clang_major__ > 3) or ((__clang_major__ == 3) and (__clang_minor__ >= 9)))
+# if __cplusplus < 201703L
+#   define KATAGRAFEAS_MAYBE_UNUSED KATAGRAFEAS_CLANG_IGNORE("-Wc++1z-extensions", [[maybe_unused]])
+# else
+#   define KATAGRAFEAS_MAYBE_UNUSED [[maybe_unused]]
+# endif
+# elif defined(__GNUC__) and (__GNUC__ >= 7)
+#   define KATAGRAFEAS_MAYBE_UNUSED [[maybe_unused]]
+# else
+#   define KATAGRAFEAS_MAYBE_UNUSED
 # endif
 
 # if defined(KATAGRAFEAS_THREADSAFE)
@@ -111,9 +137,9 @@ namespace Katagrafeas
 #   define KATAGRAFEAS_LOCK(MUTEX)     void(0)
 # endif
 
-    KATAGRAFEAS_THREADLOCAL char _log_buffer[KATAGRAFEAS_MAX_LEN];
-    KATAGRAFEAS_THREADLOCAL char _ilog_buffer[KATAGRAFEAS_MAX_LEN];
-    KATAGRAFEAS_THREADLOCAL char _wrn_buffer[KATAGRAFEAS_MAX_LEN];
+    KATAGRAFEAS_MAYBE_UNUSED static KATAGRAFEAS_THREADLOCAL char _log_buffer[KATAGRAFEAS_MAX_LEN];
+    KATAGRAFEAS_MAYBE_UNUSED static KATAGRAFEAS_THREADLOCAL char _ilog_buffer[KATAGRAFEAS_MAX_LEN];
+    KATAGRAFEAS_MAYBE_UNUSED static KATAGRAFEAS_THREADLOCAL char _wrn_buffer[KATAGRAFEAS_MAX_LEN];
     KATAGRAFEAS_MAKE_MUTEX(_log_mtx, _ilog_mtx, _wrn_mtx);
 
     // intercept individual ostreams to use a unique prefix and suffix
@@ -146,7 +172,7 @@ namespace Katagrafeas
       int sync() override;
     };
 
-    // return time formatted string
+    inline
     auto _format_string(const char* format) -> decltype(std::put_time((const std::tm*)0, (const char*)0))
     {
       const std::time_t time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
@@ -160,25 +186,24 @@ namespace Katagrafeas
       {
         Global::log << "log: " << caller << ": ";
 
-        for (unsigned k = indentation; k; --k)
+        for (unsigned k = _indentation(); k--;)
         {
           Global::log << ' ';
         }
 
         Global::log << text << std::endl;
 
-        indentation += 2;
+        _indentation() += 2;
       }
 
       ~_indentedlog() noexcept
       {
-        indentation -= 2;
+        _indentation() -= 2;
       }
     private:
-      static KATAGRAFEAS_ATOMIC(unsigned) indentation;
+      KATAGRAFEAS_ATOMIC(unsigned)& _indentation()
+      { static KATAGRAFEAS_ATOMIC(unsigned) indentation = {0}; return indentation; }
     };
-
-    KATAGRAFEAS_ATOMIC(unsigned) _indentedlog::indentation = {0};
   }
 // --Katagrafeas library: frontend struct and class definitions---------------------------------------------------------
   class Stream final
@@ -323,6 +348,8 @@ namespace Katagrafeas
     }
   }
 }
+# undef KATAGRAFEAS_PRAGMA
+# undef KATAGRAFEAS_CLANG_IGNORE
 # undef KATAGRAFEAS_HOT
 # undef KATAGRAFEAS_COLD
 # undef KATAGRAFEAS_THREADSAFE
