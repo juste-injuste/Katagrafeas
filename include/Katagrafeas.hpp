@@ -92,7 +92,7 @@ namespace Katagrafeas
 #   define KATAGRAFEAS_CLANG_IGNORE(WARNING, ...)          \
       KATAGRAFEAS_PRAGMA(clang diagnostic push)            \
       KATAGRAFEAS_PRAGMA(clang diagnostic ignored WARNING) \
-      __VA_ARGS__                                      \
+      __VA_ARGS__                                          \
       KATAGRAFEAS_PRAGMA(clang diagnostic pop)
 
 // support from clang 12.0.0 and GCC 10.1 onward
