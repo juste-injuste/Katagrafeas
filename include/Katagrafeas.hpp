@@ -112,15 +112,11 @@ namespace Katagrafeas
 #   define KATAGRAFEAS_COLD
 # endif
 
-// support from clang 3.9.0 and GCC 7.1 onward
-# if defined(__clang__) and ((__clang_major__ > 3) or ((__clang_major__ == 3) and (__clang_minor__ >= 9)))
-# if __cplusplus < 201703L
-#   define KATAGRAFEAS_MAYBE_UNUSED KATAGRAFEAS_CLANG_IGNORE("-Wc++1z-extensions", [[maybe_unused]])
-# else
-#   define KATAGRAFEAS_MAYBE_UNUSED [[maybe_unused]]
-# endif
-# elif defined(__GNUC__) and (__GNUC__ >= 7)
-#   define KATAGRAFEAS_MAYBE_UNUSED [[maybe_unused]]
+// support from clang 3.9.0 and GCC 5.1 onward
+# if defined(__clang__)
+#   define KATAGRAFEAS_MAYBE_UNUSED __attribute__((unused))
+# elif defined(__GNUC__)
+#   define KATAGRAFEAS_MAYBE_UNUSED __attribute__((unused))
 # else
 #   define KATAGRAFEAS_MAYBE_UNUSED
 # endif
@@ -202,7 +198,10 @@ namespace Katagrafeas
       }
     private:
       KATAGRAFEAS_ATOMIC(unsigned)& _indentation()
-      { static KATAGRAFEAS_ATOMIC(unsigned) indentation = {0}; return indentation; }
+      {
+        static KATAGRAFEAS_ATOMIC(unsigned) indentation = {0};
+        return indentation;
+      }
     };
   }
 // --Katagrafeas library: frontend struct and class definitions---------------------------------------------------------
