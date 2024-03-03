@@ -1,5 +1,3 @@
-
-#define KATAGRAFEAS_LOGGING
 #include "../include/Katagrafeas.hpp"
 #include <iostream>
 
@@ -7,8 +5,10 @@
 int main()
 {
   std::cout << "huh??\n";
-  Katagrafeas::Stream logger{std::cerr, "[Logger %H:%M:%S] ", ""};
+  auto logger = mud::Logger(std::cerr, "[Logger %H:%M:%S] ", "");
   std::cout << "huh??\n";
+
+  logger << "/";
 }
 
 // #include "SomeLibrary.hpp"
