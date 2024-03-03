@@ -37,6 +37,8 @@ Version 1.0.0 - Initial release
 Katagrafeas is a simple and lightweight C++11 (and newer) library that allows you easily redirect
 streams towards a common destination. See the included README.MD file for more information.
 
+lgz::Logger;
+
 -----inclusion guard--------------------------------------------------------------------------------------------------*/
 #ifndef KATAGRAFEAS_HPP
 #define KATAGRAFEAS_HPP
@@ -169,7 +171,7 @@ namespace Katagrafeas
     };
 
     inline
-    auto _format_string(const char* format) -> decltype(std::put_time((const std::tm*)0, (const char*)0))
+    auto _format_string(const char* format) -> decltype(std::put_time((const std::tm*)0, ""))
     {
       const std::time_t time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
       return std::put_time(std::localtime(&time), format);
