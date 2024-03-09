@@ -1,14 +1,11 @@
 #include "../include/Katagrafeas.hpp"
 #include <iostream>
 
-
 int main()
 {
   std::cout << "huh??\n";
-  auto logger = mud::Logger(std::cerr, "[Logger %H:%M:%S] ", "");
+  ktz::Logger logger(std::cerr, "[Logger %H:%M:%S] ", "");
   std::cout << "huh??\n";
-
-  logger << "/";
 }
 
 // #include "SomeLibrary.hpp"
