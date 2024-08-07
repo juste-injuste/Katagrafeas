@@ -63,8 +63,8 @@ namespace ktz
   // ostream redirection aswell as prefixing and suffixing
   class Logger;
 
-# define KTZ_LOG(...)             // log a message
-# define KTZ_ILOG(...)            // log a message using stack-based indentation
+# define log_message(...)             // log a message
+# define indented_log(...)            // log a message using stack-based indentation
 # define KTZ_WARNING(...)         // issue a warning
 # define KTZ_ERROR(message, code) // issue an error along with a code
 
@@ -88,6 +88,43 @@ namespace ktz
     constexpr unsigned long PATCH  = 000;
     constexpr unsigned long NUMBER = (MAJOR * 1000 + MINOR) * 1000 + PATCH;
   }
+//---Katagrafeas library: backend forward declarations------------------------------------------------------------------
+  namespace _impl
+  {
+    class _interceptor;
+  }
+// --Katagrafeas library: frontend struct and class definitions---------------------------------------------------------
+  class Logger final
+  {
+  public:
+    inline Logger(const std::ostream& ostream, const char* prefix = "", const char* suffix = "") noexcept;
+
+    inline // redirect ostream (and backup its original buffer)
+    void link(std::ostream& ostream, const char* prefix = "", const char* suffix = "") noexcept;
+
+    inline // restore ostream's original buffer
+    bool restore(std::ostream& ostream) noexcept;
+
+    inline // restore all ostreams orginal buffer
+    void restore_all() noexcept;
+
+    template<typename T> // interact with general ostream
+    inline Logger& operator<<(const T& anything) noexcept;
+    inline Logger& operator<<(std::ostream& (*manipulator)(std::ostream&)) noexcept;
+
+    inline // restore all ostreams original buffer
+    ~Logger() noexcept;
+
+  private:
+    std::vector<std::unique_ptr<_impl::_interceptor>> _backups;
+    std::streambuf* const _buffer;                      // output buffer
+    std::ostream          _underlying_ostream{_buffer}; // underlying ostream linked to the output buffer
+    std::ostream          _general_ostream{nullptr};    // ostream for general io
+    const char* const     _prefix;                      // prefix for new messages
+    const char* const     _suffix;                      // suffix for newlines
+    bool                  _prepend_flag = true;         // prepending flag
+    friend _impl::_interceptor;
+  };
 //---Katagrafeas library: backend forward declarations------------------------------------------------------------------
   namespace _impl
   {
@@ -145,11 +182,11 @@ namespace ktz
     {
     public:
       _interceptor(
-        Logger* const     stream, std::ostream&     ostream,
-        const char* const prefix, const char* const suffix
+        Logger* const     stream_, std::ostream&     ostream_,
+        const char* const prefix_, const char* const suffix_
       ) noexcept :
-        _ostream(&ostream), _stream(stream),
-        _prefix(prefix),    _suffix(suffix)
+        _ostream(&ostream_), _stream(stream_),
+        _prefix(prefix_),    _suffix(suffix_)
       {}
 
       ~_interceptor() noexcept
@@ -175,10 +212,10 @@ namespace ktz
       return std::put_time(std::localtime(&time), format_);
     }
 
-    class _indentedlog final
+    class _indented_log final
     {
     public:
-      _indentedlog(const char* const text, const char* const caller = "") noexcept
+      _indented_log(const char* const text, const char* const caller = "") noexcept
       {
         {
           _ktz_impl_DECLARE_LOCK(_log_mtx);
@@ -195,68 +232,41 @@ namespace ktz
         _indentation() += 2;
       }
 
-      ~_indentedlog() noexcept
+      ~_indented_log() noexcept
       {
         _indentation() -= 2;
       }
 
     private:
-      _ktz_impl_ATOMIC(unsigned)& _indentation()
+      auto _indentation() -> _ktz_impl_ATOMIC(unsigned)&
       {
         static _ktz_impl_ATOMIC(unsigned) indentation = {0};
         return indentation;
       }
     };
+
+    constexpr void _log(...) noexcept {};
   }
-// --Katagrafeas library: frontend struct and class definitions---------------------------------------------------------
-  class Logger final
-  {
-  public:
-    inline Logger(const std::ostream& ostream, const char* prefix = "", const char* suffix = "") noexcept;
 
-    inline // restore all ostreams orginal buffer
-    ~Logger() noexcept;
+# undef  log_message
+# define log_message(...)                         \
+    _impl::_log(([&](const char* const caller_){  \
+      using namespace ktz;                        \
+      std::sprintf(_impl::_log_buf, __VA_ARGS__); \
+      _ktz_impl_DECLARE_LOCK(_impl::_log_mtx);    \
+      _io::log << "log: " << caller_ << ": ";     \
+      _io::log << _impl::_log_buf << std::endl;   \
+    }(__func__), 0))
 
-    inline // redirect ostream (and backup its original buffer)
-    void link(std::ostream& ostream, const char* prefix = "", const char* suffix = "") noexcept;
-
-    inline // restore ostream's original buffer
-    bool restore(std::ostream& ostream) noexcept;
-
-    inline // restore all ostreams orginal buffer
-    void restore_all() noexcept;
-
-    template<typename T> // interact with general ostream
-    inline Logger& operator<<(const T& anything) noexcept;
-    inline Logger& operator<<(std::ostream& (*manipulator)(std::ostream&)) noexcept;
-  private:
-    std::vector<std::unique_ptr<_impl::_interceptor>> _backups;
-    std::streambuf* const _buffer;                      // output buffer
-    std::ostream          _underlying_ostream{_buffer}; // underlying ostream linked to the output buffer
-    std::ostream          _general_ostream{nullptr};    // ostream for general io
-    const char* const     _prefix;                      // prefix for new messages
-    const char* const     _suffix;                      // suffix for newlines
-    bool                  _prepend_flag = true;         // prepending flag
-    friend _impl::_interceptor;
-  };
-
-# undef  KTZ_LOG
-# define KTZ_LOG(...)                                             \
-    [&](const char* const caller){                                \
-      std::sprintf(_impl::_log_buf, __VA_ARGS__);                 \
-      _ktz_impl_DECLARE_LOCK(_impl::_log_mtx);                    \
-      _io::log << caller << ": " << _impl::_log_buf << std::endl; \
-    }(__func__)
-
-# undef  KTZ_ILOG
-# define KTZ_ILOG(...)                         _ktz_impl_ILOG_PROX(__LINE__,    __VA_ARGS__)
-# define _ktz_impl_ILOG_PROX(line_number, ...) _ktz_impl_ILOG_IMPL(line_number, __VA_ARGS__)
-# define _ktz_impl_ILOG_IMPL(line_number, ...)      \
-    ktz::_impl::_indentedlog _ilg_##line_number {   \
-      [&]{                                          \
-        std::sprintf(_impl::_ilg_buf, __VA_ARGS__); \
-        return buffer;                              \
-      }(), __func__}
+# undef  indented_log
+# define indented_log(...)              _ktz_impl_ILOG_PRXY(__LINE__,    __VA_ARGS__)
+# define _ktz_impl_ILOG_PRXY(LINE, ...) _ktz_impl_ILOG_IMPL(LINE,        __VA_ARGS__)
+# define _ktz_impl_ILOG_IMPL(LINE, ...)           \
+    _impl::_indented_log _ilg_##LINE([&](){       \
+      using namespace ktz;                        \
+      std::sprintf(_impl::_ilg_buf, __VA_ARGS__); \
+      return _impl::_ilg_buf;                     \
+    }(), __func__)
 
 # undef  KTZ_WARNING
 # define KTZ_WARNING(...)                                                        \
@@ -358,7 +368,6 @@ namespace ktz
 # undef _ktz_impl_THREADSAFE
 # undef _ktz_impl_THREADLOCAL
 # undef _ktz_impl_MAKE_MUTEX
-# undef _ktz_impl_DECLARE_LOCK
 # undef _ktz_impl_NODISCARD
 # undef _ktz_impl_NODISCARD_REASON
 #endif
