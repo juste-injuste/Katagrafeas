@@ -1,23 +1,15 @@
-// #include "../include/Katagrafeas.hpp"
-// #include <iostream>
-
-// int main()
-// {
-//   std::cout << "huh??\n";
-//   ktz::Logger logger(std::cerr, "[Logger %H:%M:%S] ", "");
-//   std::cout << "huh??\n";
-// }
-
 #include <iostream>
 #include "SomeLibrary.hpp"
-#include "../include/Katagrafeas.hpp"
+// #include "../include/Katagrafeas.hpp"
+#include "../include/ktz.hpp"
 #include "../include/Chronometro.hpp"
 
-// ktz::Logger logger(std::cout);
+
+ktz::Logger logger(std::cout);
 
 int main()
 {
-  // logger.link(SomeLibrary::out, "[SomeLibrary] ");
+  logger.link(SomeLibrary::out, "[SomeLibrary] ");
   // logger.link(std::cout, "[std::cout] ");
   // logger.link(std::cerr, "[std::cerr] ", " [at %H:%M:%S]");
 

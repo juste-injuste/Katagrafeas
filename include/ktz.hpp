@@ -30,7 +30,6 @@ SOFTWARE.
 
 -----versions-----------------------------------------------------------------------------------------------------------
 
-Version 1.0.0 - Initial release
 
 -----description--------------------------------------------------------------------------------------------------------
 
@@ -94,30 +93,18 @@ namespace ktz
     class _interceptor;
   }
 // --Katagrafeas library: frontend struct and class definitions---------------------------------------------------------
-  class Logger final : public std::ostream
+  class Logger final : std::ostream
   {
   public:
-    inline Logger(const std::ostream& ostream, const char* prefix = "", const char* suffix = "") noexcept;
+    inline Logger(const std::ostream& ostream) noexcept;
 
     inline // redirect ostream (and backup its original buffer)
     void link(std::ostream& ostream, const char* prefix = "", const char* suffix = "") noexcept;
-
-    inline // restore ostream's original buffer
-    bool restore(std::ostream& ostream) noexcept;
-
-    inline // restore all ostreams orginal buffer
-    void restore_all() noexcept;
-
-    inline // restore all ostreams original buffer
-    ~Logger() noexcept;
 
   private:
     std::vector<std::unique_ptr<_impl::_interceptor>> _backups;
     std::streambuf* const _buffer;                      // output buffer
     std::ostream          _underlying_ostream{_buffer}; // underlying ostream linked to the output buffer
-    const char* const     _prefix;                      // prefix for new messages
-    const char* const     _suffix;                      // suffix for newlines
-    bool                  _prepend_flag = true;         // prepending flag
     friend _impl::_interceptor;
   };
 //---Katagrafeas library: backend forward declarations------------------------------------------------------------------
@@ -173,39 +160,34 @@ namespace ktz
     _ktz_impl_MAYBE_UNUSED static _ktz_impl_THREADLOCAL char _wrn_buf[_ktz_impl_MAX_LEN];
     _ktz_impl_MAKE_MUTEX(_log_mtx, _ilg_mtx, _wrn_mtx);
 
-    class _interceptor final : public std::streambuf
+    struct _interceptor final : public std::streambuf
     {
-    public:
+      friend Logger;
       _interceptor(
-        Logger* const     stream_, std::ostream&     ostream_,
+        Logger* const     logger_, std::ostream&     ostream_,
         const char* const prefix_, const char* const suffix_
       ) noexcept :
-        _ostream(&ostream_), _stream(stream_),
-        _prefix(prefix_),    _suffix(suffix_)
-      {}
-
-      _interceptor(
-        Logger* const     stream_,
-        const char* const prefix_, const char* const suffix_
-      ) noexcept :
-        _ostream(stream_), _stream(stream_),
-        _prefix(prefix_),  _suffix(suffix_)
-      {}
-
-      ~_interceptor() noexcept
+        _logger(*logger_), _ostream(ostream_),
+        _prefix(prefix_), _suffix(suffix_)
       {
-        _ostream->rdbuf(_buffer_backup);
+        // ostream_.rdbuf(this);
       }
 
-      std::ostream* const    _ostream;
-    private:
-      std::streambuf* const _buffer_backup = _ostream->rdbuf();
-      Logger* const         _stream;
+      virtual
+      ~_interceptor() noexcept
+      {
+        // _ostream.rdbuf(_buffer_backup);
+      }
+      
+      Logger&               _logger;
+      std::ostream&         _ostream;
+      // // std::streambuf* const _buffer_backup = _ostream.rdbuf();
       const char* const     _prefix;
       const char* const     _suffix;
 
-      inline auto overflow(int_type character) -> int_type override;
-      inline auto sync() -> int override;
+      inline auto virtual overflow(int_type character) -> int_type final;
+      inline auto virtual underflow() -> int_type final;
+      inline auto virtual sync() -> int final;
     };
 
     inline
@@ -287,65 +269,50 @@ namespace ktz
       _io::err << "error: " << caller << ": " << _impl::_err_buf << std::endl; \
     }(__func__), return_value
 //----------------------------------------------------------------------------------------------------------------------
-  Logger::Logger(const std::ostream& ostream_, const char* const prefix_, const char* const suffix_) noexcept :
-    std::ostream(new _impl::_interceptor(this, prefix_, suffix_)),
-    _buffer(ostream_.rdbuf()), _prefix(prefix_), _suffix(suffix_)
-  {}
-
-  Logger::~Logger() noexcept
+  Logger::Logger(const std::ostream& ostream_) noexcept :
+    _buffer(ostream_.rdbuf())
   {
-    restore_all();
+    // link(_general_ostream);
   }
 
   void Logger::link(std::ostream& ostream_, const char* const prefix_, const char* const suffix_) noexcept
   {
-    _backups.emplace_back(new _impl::_interceptor(this, ostream_, prefix_, suffix_));
-    ostream_.rdbuf(_backups.back().get()); // redirect towards the new interceptor
+    const auto backup = new _impl::_interceptor(this, ostream_, prefix_, suffix_);
+    _backups.emplace_back(backup);
+    // ostream_.rdbuf(_backups.back().get()); // redirect towards the new interceptor
   }
 
-  bool Logger::restore(std::ostream& ostream_) noexcept
-  {
-    for (size_t k = _backups.size() - 1; k; --k)
-    {
-      if (_backups[k]->_ostream == &ostream_)
-      {
-        _backups.erase(_backups.begin() + k);
-        return true;
-      }
-    }
 
-    KTZ_WARNING("ostream was not in in backup list.");
 
-    return false;
-  }
-
-  void Logger::restore_all() noexcept
-  {
-    _backups.clear();
-  }
 // --Katagrafeas library: frontend struct and class member definitions--------------------------------------------------
   namespace _impl
   {
     auto _interceptor::overflow(const int_type character_) -> int_type
     {
-      if (character_ == '\n') _ktz_impl_UNLIKELY
-      {
-        _stream->_underlying_ostream << _impl::_format_string(_suffix);
-        _stream->_underlying_ostream << _impl::_format_string(_stream->_suffix);
-      }
-      else if (_stream->_prepend_flag) _ktz_impl_UNLIKELY
-      {
-        _stream->_underlying_ostream << _impl::_format_string(_stream->_prefix);
-        _stream->_underlying_ostream << _impl::_format_string(_prefix);
-        _stream->_prepend_flag = false;
-      }
+      // if (character_ == '\n') _ktz_impl_UNLIKELY
+      // {
+      //   _logger._underlying_ostream << _impl::_format_string(_suffix);
+      //   _logger._underlying_ostream << _impl::_format_string(_logger._suffix);
+      // }
+      // else if (_logger._prepend_flag) _ktz_impl_UNLIKELY
+      // {
+      //   _logger._underlying_ostream << _impl::_format_string(_logger._prefix);
+      //   _logger._underlying_ostream << _impl::_format_string(_prefix);
+      //   _logger._prepend_flag = false;
+      // }
 
-      return _stream->_buffer->sputc(static_cast<char>(character_));
+      return _logger._buffer->sputc(static_cast<char>(character_));
+      return character_;
+    }
+
+    auto _interceptor::underflow() -> int_type
+    {
+      return EOF;
     }
 
     auto _interceptor::sync() -> int
     {
-      _stream->_prepend_flag = true;
+      // _logger._prepend_flag = true;
       return 0;
     }
   }
